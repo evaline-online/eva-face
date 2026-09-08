@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ASCII • Лица — коллекция + наша 3D-голова</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --ink:#c9d1d9; --dim:#8b949e; --acc:#ffcc66; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body {
+    background:var(--bg); color:var(--ink);
+    font:14px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+    display:flex; flex-direction:column;
+  }
+  header {
+    padding:10px 16px; background:linear-gradient(90deg,#161b22,#1f2430);
+    border-bottom:1px solid #30363d; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  header h1 { font-size:16px; margin:0; letter-spacing:.5px; }
+  header h1 span { color:var(--acc); }
+  header .sub { color:var(--dim); font-size:12px; }
+  nav.tabs { display:flex; gap:4px; margin-left:auto; }
+  .tab {
+    padding:6px 12px; border:1px solid #30363d; border-radius:6px; cursor:pointer;
+    background:var(--panel); color:var(--ink); font-family:inherit; font-size:12px;
+  }
+  .tab.active { background:var(--acc); color:#000; border-color:var(--acc); font-weight:700; }
+  main { flex:1; display:flex; overflow:hidden; }
+  aside {
+    width:280px; min-width:280px; background:var(--panel); border-right:1px solid #30363d;
+    overflow-y:auto; padding:8px;
+  }
+  aside input[type=search] {
+    width:100%; padding:6px 8px; margin-bottom:8px; background:var(--bg);
+    border:1px solid #30363d; border-radius:6px; color:var(--ink); font-family:inherit;
+  }
+  .list-item {
+    padding:6px 8px; border-radius:6px; cursor:pointer; border-bottom:1px solid #21262d;
+  }
+  .list-item:hover { background:#21262d; }
+  .list-item.active { background:#2d333b; outline:1px solid var(--acc); }
+  .list-item .num { color:var(--acc); }
+  .list-item .who { color:var(--dim); font-size:11px; margin-top:2px; }
+  #stage { flex:1; overflow:auto; padding:18px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+  .hash { color:var(--dim); font-size:11px; }
+  .artist { color:var(--acc); }
+  pre.art {
+    margin:0; padding:14px; background:#0a0e14; border:1px solid #30363d; border-radius:8px;
+    font:inherit; white-space:pre; color:#e6edf3; box-shadow:inset 0 0 30px rgba(0,0,0,.5);
+  }
+  .pill { font-size:11px; color:var(--dim); }
+  a.gimg { color:var(--acc); text-decoration:none; border-bottom:1px dashed var(--acc); }
+  a.gimg:hover { color:#fff; }
+  .head-panel { display:flex; gap:18px; flex-wrap:wrap; width:100%; }
+  .head-box { background:var(--panel); border:1px solid #30363d; border-radius:8px; padding:12px; }
+  .head-box h3 { margin:0 0 10px; font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+  .ctrl label { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:12px; }
+  .ctrl label span { width:150px; color:var(--dim); }
+  .ctrl input[type=range] { flex:1; }
+  .ctrl output { width:38px; text-align:right; color:var(--ink); }
+  .btn {
+    padding:6px 10px; margin:2px; border:1px solid #30363d; border-radius:6px; cursor:pointer;
+    background:var(--bg); color:var(--ink); font-family:inherit; font-size:12px;
+  }
+  .btn:hover { border-color:var(--acc); }
+  .btn.on { background:var(--acc); color:#000; border-color:var(--acc); }
+  footer { padding:8px 16px; border-top:1px solid #30363d; color:var(--dim); font-size:11px; }
+  .switch { display:flex; align-items:center; gap:6px; margin:8px 0; font-size:12px; }
+  .hip { color:#3fb950; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ASCII<span>•</span>ЛИЦА</h1>
+  <div class="sub">коллекция из <b>__COUNT__</b> работ + наша шейдинговая голова · одинаковый движок в терминале и браузере</div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="col">Коллекция</button>
+    <button class="tab" data-tab="head">Наша 3D-голова</button>
+  </nav>
+</header>
+<main>
+  <aside id="col-sidebar" style="display:block"></aside>
+  <aside id="head-sidebar" style="display:none">
+    <div class="head-panel">
+      <div class="head-box" style="flex:0 0 300px">
+        <h3>Движок</h3>
+        <div id="head-prev" style="background:#0a0e14;border:1px solid #30363d;border-radius:8px;padding:10px"></div>
+        <div class="switch"><input type="checkbox" id="anim" checked> <label for="anim">Анимация (речь · повороты · моргание)</label></div>
+        <h3>Выражения</h3>
+        <div id="presets"></div>
+      </div>
+      <div class="head-box" style="flex:1;min-width:260px">
+        <h3>Параметры</h3>
+        <div class="ctrl" id="head-params">
+          <label><span>Рот (открытость)</span> <input type="range" id="pMouth" min="0" max="1" step="0.01" value="0.3"> <output id="oMouth">0.30</output></label>
+          <label><span>Улыбка</span> <input type="range" id="pSmile" min="-1" max="1" step="0.01" value="0.3"> <output id="oSmile">0.30</output></label>
+          <label><span>Наклон (roll)</span> <input type="range" id="pRoll" min="-30" max="30" step="1" value="0"> <output id="oRoll">0°</output></label>
+          <label><span>Кивок (pitch)</span> <input type="range" id="pPitch" min="-30" max="30" step="1" value="0"> <output id="oPitch">0°</output></label>
+          <label><span>Взгляд X</span> <input type="range" id="pLookX" min="-1" max="1" step="0.05" value="0"> <output id="oLookX">0.00</output></label>
+          <label><span>Взгляд Y</span> <input type="range" id="pLookY" min="-1" max="1" step="0.05" value="0"> <output id="oLookY">0.00</output></label>
+          <label><span>Моргание</span> <input type="range" id="pBlink" min="0" max="1" step="1" value="0"> <output id="oBlink">откр</output></label>
+        </div>
+        <div class="switch"><input type="checkbox" id="pGlasses"> <label for="pGlasses">Очки</label></div>
+      </div>
+    </div>
+  </aside>
+  <section id="stage"></section>
+</main>
+<footer>
+  Данные: <a class="gimg" href="https://www.asciiart.eu/people/faces">asciiart.eu/people</a> ·
+  <a class="gimg" href="https://asciiart.website/misc/faces/art/5770">asciiart.website</a> ·
+  <a class="gimg" href="https://ludd.ltu.se/~vk/pics/ascii/by_subject.shtml">VK gallery</a> ·
+  Google: <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+art+face+portrait">ascii art face</a> ·
+  <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+art+portrait+man">портрет</a> ·
+  <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+art+famous+face">знаменитости</a> ·
+  <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+self+portrait">self-portraits</a>
+  <span style="float:right">движок: <span class="hip">head.js</span> · терминал: <span class="hip">node viewer.node.js</span> + <span class="hip">node head3d.node.js</span></span>
+</footer>
+<script>
+/*__HEADS__*/
+var FACES = /*__FACES__*/;
+(function () {
+  var F = FACES;
+  var sideCol = document.getElementById('col-sidebar');
+  var sideHead = document.getElementById('head-sidebar');
+  var stage = document.getElementById('stage');
+  var tabs = document.querySelectorAll('.tab');
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  var filterBox = document.createElement('input');
+  filterBox.type = 'search';
+  filterBox.placeholder = 'фильтр по названию/автору…';
+  sideCol.appendChild(filterBox);
+
+  var list = document.createElement('div');
+  sideCol.appendChild(list);
+
+  var current = 0;
+  function renderList() {
+    var q = filterBox.value.toLowerCase();
+    list.innerHTML = '';
+    F.items.forEach(function (it) {
+      if (q && it.title.toLowerCase().indexOf(q) < 0 && it.artist.toLowerCase().indexOf(q) < 0) return;
+      var d = document.createElement('div');
+      d.className = 'list-item' + (it.id === current ? ' active' : '');
+      d.innerHTML = '<div><span class="num">#' + it.id + '</span> ' + esc(it.title) + '</div><div class="who">' + esc(it.artist) + '</div>';
+      d.onclick = function () { current = it.id; renderList(); showIt(); };
+      list.appendChild(d);
+    });
+  }
+  filterBox.oninput = renderList;
+
+  function showIt() {
+    var it = F.items.filter(function (x) { return x.id === current; })[0] || F.items[0];
+    stage.innerHTML = '';
+    var h = document.createElement('div');
+    h.innerHTML = '<div><b>' + esc(it.title) + '</b> <span class="artist">· ' + esc(it.artist) + '</span></div>' +
+      '<div class="hash">#' + it.id + ' · ' + it.art.length + ' символов</div>';
+    var pre = document.createElement('pre');
+    pre.className = 'art';
+    pre.textContent = it.art;
+    stage.appendChild(h);
+    stage.appendChild(pre);
+  }
+
+  function onTab(name) {
+    tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === name); });
+    var col = name === 'col';
+    sideCol.style.display = col ? 'block' : 'none';
+    sideHead.style.display = col ? 'none' : 'block';
+    if (col) showIt(); else renderHeadStatic();
+  }
+  tabs.forEach(function (t) { t.onclick = function () { onTab(t.dataset.tab); }; });
+
+  var p = {
+    mouthOpen: 0.3, smile: 0.3, roll: 0, pitch: 0,
+    lookX: 0, lookY: 0, blink: 0, glasses: 0, expression: 'neutral', width: 52, height: 26
+  };
+  function renderHeadStatic() {
+    var rows = AsciiLab.renderHead(p);
+    document.getElementById('head-prev').textContent = rows.join('\n');
+  }
+  function bind(id, out, fmt, key) {
+    document.getElementById(id).addEventListener('input', function () {
+      p[key] = parseFloat(this.value);
+      document.getElementById(out).textContent = fmt(this.value);
+    });
+  }
+  bind('pMouth', 'oMouth', function (v) { return (+v).toFixed(2); }, 'mouthOpen');
+  bind('pSmile', 'oSmile', function (v) { return (+v).toFixed(2); }, 'smile');
+  bind('pRoll', 'oRoll', function (v) { return v + '°'; }, 'roll');
+  bind('pPitch', 'oPitch', function (v) { return v + '°'; }, 'pitch');
+  bind('pLookX', 'oLookX', function (v) { return (+v).toFixed(2); }, 'lookX');
+  bind('pLookY', 'oLookY', function (v) { return (+v).toFixed(2); }, 'lookY');
+  bind('pBlink', 'oBlink', function (v) { return v ? 'закрыто' : 'откр'; }, 'blink');
+  document.getElementById('pGlasses').onchange = function () { p.glasses = this.checked ? 1 : 0; renderHeadStatic(); };
+
+  var presetBox = document.getElementById('presets');
+  AsciiLab.presets().forEach(function (pr) {
+    var b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = pr.name;
+    b.onclick = function () {
+      Object.keys(pr).forEach(function (k) { if (k !== 'name') p[k] = pr[k]; });
+      syncControls(); renderHeadStatic();
+    };
+    presetBox.appendChild(b);
+  });
+  function syncControls() {
+    document.getElementById('pMouth').value = p.mouthOpen;
+    document.getElementById('oMouth').textContent = (+p.mouthOpen).toFixed(2);
+    document.getElementById('pSmile').value = p.smile;
+    document.getElementById('oSmile').textContent = (+p.smile).toFixed(2);
+    document.getElementById('pRoll').value = p.roll;
+    document.getElementById('oRoll').textContent = p.roll + '°';
+    document.getElementById('pPitch').value = p.pitch;
+    document.getElementById('oPitch').textContent = p.pitch + '°';
+    document.getElementById('pLookX').value = p.lookX;
+    document.getElementById('oLookX').textContent = (+p.lookX).toFixed(2);
+    document.getElementById('pLookY').value = p.lookY;
+    document.getElementById('oLookY').textContent = (+p.lookY).toFixed(2);
+    document.getElementById('pBlink').value = p.blink;
+    document.getElementById('oBlink').textContent = p.blink ? 'закрыто' : 'откр';
+    document.getElementById('pGlasses').checked = !!p.glasses;
+  }
+
+  var animBox = document.getElementById('anim');
+  var t0 = null;
+  function loop(ts) {
+    if (!t0) t0 = ts;
+    if (animBox.checked) {
+      var t = (ts - t0) / 1000;
+      var ap = AsciiLab.animateParams(t);
+      Object.keys(ap).forEach(function (k) { p[k] = ap[k]; });
+      p.expression = 'neutral';
+      renderHeadStatic();
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  renderList();
+  showIt();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ASCII • Лица — коллекция + наша 3D-голова</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --ink:#c9d1d9; --dim:#8b949e; --acc:#ffcc66; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body {
+    background:var(--bg); color:var(--ink);
+    font:14px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+    display:flex; flex-direction:column;
+  }
+  header {
+    padding:10px 16px; background:linear-gradient(90deg,#161b22,#1f2430);
+    border-bottom:1px solid #30363d; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  header h1 { font-size:16px; margin:0; letter-spacing:.5px; }
+  header h1 span { color:var(--acc); }
+  header .sub { color:var(--dim); font-size:12px; }
+  nav.tabs { display:flex; gap:4px; margin-left:auto; }
+  .tab {
+    padding:6px 12px; border:1px solid #30363d; border-radius:6px; cursor:pointer;
+    background:var(--panel); color:var(--ink); font-family:inherit; font-size:12px;
+  }
+  .tab.active { background:var(--acc); color:#000; border-color:var(--acc); font-weight:700; }
+  main { flex:1; display:flex; overflow:hidden; }
+  aside {
+    width:280px; min-width:280px; background:var(--panel); border-right:1px solid #30363d;
+    overflow-y:auto; padding:8px;
+  }
+  aside input[type=search] {
+    width:100%; padding:6px 8px; margin-bottom:8px; background:var(--bg);
+    border:1px solid #30363d; border-radius:6px; color:var(--ink); font-family:inherit;
+  }
+  .list-item {
+    padding:6px 8px; border-radius:6px; cursor:pointer; border-bottom:1px solid #21262d;
+  }
+  .list-item:hover { background:#21262d; }
+  .list-item.active { background:#2d333b; outline:1px solid var(--acc); }
+  .list-item .num { color:var(--acc); }
+  .list-item .who { color:var(--dim); font-size:11px; margin-top:2px; }
+  #stage { flex:1; overflow:auto; padding:18px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+  .hash { color:var(--dim); font-size:11px; }
+  .artist { color:var(--acc); }
+  pre.art {
+    margin:0; padding:14px; background:#0a0e14; border:1px solid #30363d; border-radius:8px;
+    font:inherit; white-space:pre; color:#e6edf3; box-shadow:inset 0 0 30px rgba(0,0,0,.5);
+  }
+  .pill { font-size:11px; color:var(--dim); }
+  a.gimg { color:var(--acc); text-decoration:none; border-bottom:1px dashed var(--acc); }
+  a.gimg:hover { color:#fff; }
+  .head-panel { display:flex; gap:18px; flex-wrap:wrap; width:100%; }
+  .head-box { background:var(--panel); border:1px solid #30363d; border-radius:8px; padding:12px; }
+  .head-box h3 { margin:0 0 10px; font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+  .ctrl label { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:12px; }
+  .ctrl label span { width:150px; color:var(--dim); }
+  .ctrl input[type=range] { flex:1; }
+  .ctrl output { width:38px; text-align:right; color:var(--ink); }
+  .btn {
+    padding:6px 10px; margin:2px; border:1px solid #30363d; border-radius:6px; cursor:pointer;
+    background:var(--bg); color:var(--ink); font-family:inherit; font-size:12px;
+  }
+  .btn:hover { border-color:var(--acc); }
+  .btn.on { background:var(--acc); color:#000; border-color:var(--acc); }
+  footer { padding:8px 16px; border-top:1px solid #30363d; color:var(--dim); font-size:11px; }
+  .switch { display:flex; align-items:center; gap:6px; margin:8px 0; font-size:12px; }
+  .hip { color:#3fb950; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ASCII<span>•</span>ЛИЦА</h1>
+  <div class="sub">коллекция из <b>29</b> работ + наша шейдинговая голова · одинаковый движок в терминале и браузере</div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="col">Коллекция</button>
+    <button class="tab" data-tab="head">Наша 3D-голова</button>
+  </nav>
+</header>
+<main>
+  <aside id="col-sidebar" style="display:block"></aside>
+  <aside id="head-sidebar" style="display:none">
+    <div class="head-panel">
+      <div class="head-box" style="flex:0 0 300px">
+        <h3>Движок</h3>
+        <div id="head-prev" style="background:#0a0e14;border:1px solid #30363d;border-radius:8px;padding:10px"></div>
+        <div class="switch"><input type="checkbox" id="anim" checked> <label for="anim">Анимация (речь · повороты · моргание)</label></div>
+        <h3>Выражения</h3>
+        <div id="presets"></div>
+      </div>
+      <div class="head-box" style="flex:1;min-width:260px">
+        <h3>Параметры</h3>
+        <div class="ctrl" id="head-params">
+          <label><span>Рот (открытость)</span> <input type="range" id="pMouth" min="0" max="1" step="0.01" value="0.3"> <output id="oMouth">0.30</output></label>
+          <label><span>Улыбка</span> <input type="range" id="pSmile" min="-1" max="1" step="0.01" value="0.3"> <output id="oSmile">0.30</output></label>
+          <label><span>Наклон (roll)</span> <input type="range" id="pRoll" min="-30" max="30" step="1" value="0"> <output id="oRoll">0°</output></label>
+          <label><span>Кивок (pitch)</span> <input type="range" id="pPitch" min="-30" max="30" step="1" value="0"> <output id="oPitch">0°</output></label>
+          <label><span>Взгляд X</span> <input type="range" id="pLookX" min="-1" max="1" step="0.05" value="0"> <output id="oLookX">0.00</output></label>
+          <label><span>Взгляд Y</span> <input type="range" id="pLookY" min="-1" max="1" step="0.05" value="0"> <output id="oLookY">0.00</output></label>
+          <label><span>Моргание</span> <input type="range" id="pBlink" min="0" max="1" step="1" value="0"> <output id="oBlink">откр</output></label>
+        </div>
+        <div class="switch"><input type="checkbox" id="pGlasses"> <label for="pGlasses">Очки</label></div>
+      </div>
+    </div>
+  </aside>
+  <section id="stage"></section>
+</main>
+<footer>
+  Данные: <a class="gimg" href="https://www.asciiart.eu/people/faces">asciiart.eu/people</a> ·
+  <a class="gimg" href="https://asciiart.website/misc/faces/art/5770">asciiart.website</a> ·
+  <a class="gimg" href="https://ludd.ltu.se/~vk/pics/ascii/by_subject.shtml">VK gallery</a> ·
+  Google: <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+art+face+portrait">ascii art face</a> ·
+  <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+art+portrait+man">портрет</a> ·
+  <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+art+famous+face">знаменитости</a> ·
+  <a class="gimg" target="_blank" href="https://www.google.com/search?tbm=isch&q=ascii+self+portrait">self-portraits</a>
+  <span style="float:right">движок: <span class="hip">head.js</span> · терминал: <span class="hip">node viewer.node.js</span> + <span class="hip">node head3d.node.js</span></span>
+</footer>
+<script>
+(function (root, factory) {
+  if (typeof module !== 'undefined' && module.exports) module.exports = factory();
+  else root.AsciiLab = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var RAMP = '@%#*+=-:. ';
+  var HAIR = '%#@';
+  var OUT = '+*#';
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function step(a, b, x) { return clamp((x - a) / (b - a), 0, 1); }
+  function shade(d) { return RAMP[clamp(Math.round(clamp(d, 0, 1) * (RAMP.length - 1)), 0, RAMP.length - 1)]; }
+  function segDist(px, py, x1, y1, x2, y2) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var t = clamp(((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy), 0, 1);
+    var ex = px - (x1 + t * dx), ey = py - (y1 + t * dy);
+    return Math.sqrt(ex * ex + ey * ey);
+  }
+
+  function PRESETS() {
+    return [
+      { name: 'нейтральный',  expression: 'neutral',   mouthOpen: 0.22, smile: 0.2,  blink: 0, glasses: 0, roll: 0, pitch: 0 },
+      { name: 'улыбка',       expression: 'happy',     mouthOpen: 0.45, smile: 1,    blink: 0, glasses: 0, roll: 0, pitch: 0 },
+      { name: 'грусть',       expression: 'sad',       mouthOpen: 0.12, smile: -1,   blink: 0, glasses: 0, roll: 0, pitch: 0 },
+      { name: 'сердитый',     expression: 'angry',     mouthOpen: 0.12, smile: -0.6, blink: 0, glasses: 0, roll: 0, pitch: 0 },
+      { name: 'сюрприз',      expression: 'surprised', mouthOpen: 0.95, smile: 0.1,  blink: 0, glasses: 0, roll: 0, pitch: 0 },
+      { name: 'очки',         expression: 'neutral',   mouthOpen: 0.25, smile: 0.5,  blink: 0, glasses: 1, roll: 0, pitch: 0 }
+    ];
+  }
+
+  var EXPR = {
+    neutral:   { browY: -0.52, browIn: 0,    eye: 'o', browSlant: 0 },
+    happy:     { browY: -0.54, browIn: 0,    eye: '^', browSlant: 0 },
+    sad:       { browY: -0.50, browIn: 0.05, eye: '.', browSlant: 0.05 },
+    angry:     { browY: -0.48, browIn: 0.09, eye: 'o', browSlant: 0.1 },
+    surprised: { browY: -0.57, browIn: 0,    eye: '0', browSlant: 0 }
+  };
+
+  function renderHead(opt) {
+    var p = opt || {};
+    var W = p.width || 52, H = p.height || 26;
+    var expr = p.expression || 'neutral';
+    var E = EXPR[expr] || EXPR['neutral'];
+    var mouth = clamp(p.mouthOpen != null ? p.mouthOpen : 0.3, 0, 1);
+    var smile = clamp(p.smile != null ? p.smile : 0.2, -1, 1);
+    var blink = p.blink ? 1 : 0;
+    var glasses = p.glasses ? 1 : 0;
+    var roll = (p.roll || 0) * Math.PI / 180;
+    var pitch = (p.pitch || 0) * Math.PI / 180;
+    var lookX = clamp(p.lookX != null ? p.lookX : 0, -1, 1);
+    var lookY = clamp(p.lookY != null ? p.lookY : 0, -1, 1);
+    var cr = Math.cos(roll), sr = Math.sin(roll);
+    var eyeY = -0.40, eyeC = 0.38;
+
+    var cx = (W - 1) * 0.5, cy = (H - 1) * 0.48;
+    var rx = (W - 1) * 0.47, ry = (H - 1) * 0.46;
+    var POW = 2.4;
+    var rows = [];
+
+    function U(x) { return (x - cx) / rx; }
+    function V(y) { return (y - cy) / ry; }
+
+    function isIn(u, v) { return Math.pow(Math.abs(u), POW) + Math.pow(Math.abs(v), POW) <= 1; }
+
+    function skinLight(u, v) {
+      var nx = -Math.sign(u) * Math.pow(Math.abs(u), POW - 1);
+      var ny = -Math.sign(v) * Math.pow(Math.abs(v), POW - 1);
+      var mag = Math.sqrt(nx * nx + ny * ny + 1);
+      var ndotl = (-nx * 0.42 - ny * 0.40 + 0.82) / (mag * 1.02);
+      var d = 0.30 + 0.70 * clamp(ndotl, -0.2, 1);
+      if (v > 0.03 && v < 0.34 && Math.abs(u) < 0.34) d *= lerp(0.86, 1, step(0.03, 0.34, v));
+      if (v > 0.48 && v < 0.66 && Math.abs(u) < 0.30) d *= lerp(0.80, 1, step(0.48, 0.66, v));
+      if (u > 0.05 && u < 0.30 && v > -0.30 && v < 0.12) d *= 0.9;
+      if (Math.abs(u) > 0.7) d *= lerp(0.78, 1, Math.abs(u));
+      return clamp(d, 0, 1);
+    }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    for (var y = 0; y < H; y++) {
+      var line = '';
+      for (var x = 0; x < W; x++) {
+        var u = U(x), v = V(y);
+        var uu = u * cr - v * sr;
+        var vv = u * sr + v * cr;
+        u = uu; v = vv;
+        v -= Math.tan(pitch) * 0.5 * (1 - 0.5 * u * u);
+
+        var inside = isIn(u, v);
+        var ae = Math.pow(Math.abs(u), POW) + Math.pow(Math.abs(v), POW);
+        var ch = ' ';
+
+        if (inside || (Math.abs(u) > 1.02 && Math.abs(u) < 1.12)) {
+          var d = skinLight(u, v);
+          if (Math.abs(u) > 1.02 && Math.abs(u) < 1.12 && v > -0.25 && v < 0.38) {
+            ch = (u > 0) ? ')' : '(';
+          } else if (v < -0.74 || (Math.abs(u) > 0.90 && v < 0.06 && v > -0.86)) {
+            ch = HAIR[clamp(Math.round(d * (HAIR.length - 1)), 0, HAIR.length - 1)];
+          } else {
+            if (ae > 0.80) ch = OUT[clamp(Math.round(d * (OUT.length - 1)), 0, OUT.length - 1)];
+            else if (ae > 0.60) ch = shade(d * 0.85);
+            else ch = shade(d);
+          }
+
+          var s, bz;
+          for (s = -1; s <= 1; s += 2) {
+            var bY = E.browY + (E.browSlant * (s < 0 ? -1 : 1));
+            bz = segDist(u, v, s * 0.50, bY, s * 0.26, bY + E.browIn * 2);
+            if (bz < 0.034) { ch = (s < 0) ? '\\' : '/'; }
+          }
+
+          for (s = -1; s <= 1; s += 2) {
+            var cen = s * eyeC, ecx = cen;
+            var eyeD = Math.pow((u - ecx) / 0.19, 2) + Math.pow((v - eyeY) / 0.175, 2);
+            if (eyeD <= 1) {
+              if (glasses) {
+                var gD = Math.pow((u - ecx) / 0.20, 2) + Math.pow((v - eyeY) / 0.19, 2);
+                if (gD > 0.62 && gD <= 1) { ch = 'O'; }
+                else if (gD <= 0.62) { ch = glassesInner(u, v, ecx, s); }
+              } else {
+                ch = eyeInner(u, v, ecx, s);
+              }
+            }
+            if (glasses && Math.pow((u - 0) / 1.0, 2) < 1 && Math.abs(v - (-0.40 - 0.20)) < 0.09 && Math.abs(u) < 0.18 && eyeD > 0.99) {
+              if (Math.abs(v - (eyeY - 0.195)) < 0.06) ch = '=';
+            }
+          }
+
+          var nose = noseChar(u, v, d);
+          if (nose) ch = nose;
+
+          var m = mouthChar(u, v, d, mouth, smile);
+          if (m) ch = m;
+
+          var pz = pzChar(u, v, d);
+          if (pz) ch = pz;
+        } else {
+          if (v > 1.06 && Math.abs(u) < 1.06 - (v - 1.06) * 3.0) {
+            ch = shade(lerp(0.42, 0.55, step(1.06, 1.22, v)));
+          } else if (v > 0.92 && Math.abs(u) < 0.10) {
+            ch = shade(0.5);
+          }
+        }
+        line += ch;
+      }
+      rows.push(line);
+    }
+
+    function eyeInner(u, v, ecx, s) {
+      var px = ecx + lookX * 0.05, py = eyeY + lookY * 0.03;
+      var pD = Math.pow((u - px) / 0.045, 2) + Math.pow((v - py) / 0.05, 2);
+      var iD = Math.pow((u - px) / 0.10, 2) + Math.pow((v - py) / 0.105, 2);
+      if (blink) {
+        if (Math.abs(v - eyeY) < 0.045 && Math.abs(u - ecx) < 0.15) return '=';
+        return ' ';
+      }
+      if (pD <= 1) return E.eye;
+      if (iD <= 1) return 'o';
+      return '*';
+    }
+
+    function glassesInner(u, v, ecx, s) {
+      var px = ecx + lookX * 0.05, py = eyeY + lookY * 0.03;
+      var pD = Math.pow((u - px) / 0.045, 2) + Math.pow((v - py) / 0.05, 2);
+      if (blink) return Math.abs(v - eyeY) < 0.045 && Math.abs(u - ecx) < 0.15 ? '=' : ' ';
+      if (pD <= 1) return E.eye;
+      return '*';
+    }
+
+    function noseChar(u, v, d) {
+      if (u >= -0.035 && u <= 0.035 && v >= -0.36 && v <= 0.16) {
+        if (Math.abs(u) <= 0.012) return '|';
+        if (u > 0) return shade(d * 0.72);
+        return shade(d * 0.94);
+      }
+      if (v >= 0.14 && v <= 0.24) {
+        if ((u >= 0.05 && u <= 0.15) || (u >= -0.15 && u <= -0.05)) return ',';
+        if (u >= -0.05 && u <= 0.05) return '.';
+      }
+      return null;
+    }
+
+    function mouthChar(u, v, d, mouth, smile) {
+      var mw = 0.17 + 0.12 * mouth;
+      var mh = 0.025 + 0.09 * mouth * (0.6 + 0.4 * Math.abs(smile));
+      var mA = smile * 0.06;
+      var upl = 0.44 + mA * ((u / mw) * (u / mw));
+      var mid = 0.44;
+      var me = Math.pow(u / mw, 2) + Math.pow((v - (mid - smile * 0.03 * (u / mw) * (u / mw))) / mh, 2);
+      if (me > 1) return null;
+      if (me > 0.68) {
+        if (v < mid) return '_';
+        return '-';
+      }
+      if (mouth > 0.12) {
+        if (v < mid + 0.01 && mouth > 0.45 && u > -mw * 0.6 && u < mw * 0.62) {
+          if (Math.abs(v - upl) < mh * 0.55) return '=';
+        }
+        return '.';
+      }
+      return shade(d * 0.56);
+    }
+
+    function pzChar(u, v, d) {
+      if (Math.abs(u) < 0.16 && v > 0.42 && v < 0.52) return shade(d * 0.8);
+      return null;
+    }
+
+    return rows;
+  }
+
+  function frame(title, body) {
+    var lines = typeof body === 'string' ? body.split('\n') : body;
+    var w = (title || '').length;
+    for (var i = 0; i < lines.length; i++) w = Math.max(w, lines[i].length);
+    var pad = Math.max(0, w - (title || '').length);
+    return ['+' + new Array(w + 3).join('=') + '+'].concat(
+      title ? ['| ' + title + new Array(pad + 1).join(' ') + ' |'] : [],
+      lines.map(function (l) {
+        return '| ' + l + new Array(Math.max(0, w - l.length) + 1).join(' ') + ' |';
+      }),
+      ['+' + new Array(w + 3).join('=') + '+']
+    );
+  }
+
+  function animateParams(t) {
+    var speech = Math.max(0, Math.sin(t * 5.3) * 0.5 + Math.sin(t * 13.7) * 0.3 + Math.sin(t * 2.9 + 1.7) * 0.3);
+    var blink = (t % 3.6) > 3.42 ? 1 : 0;
+    return {
+      roll: Math.sin(t * 0.7) * 6 + Math.sin(t * 0.23 + 2) * 3,
+      pitch: Math.sin(t * 0.5 + 1.1) * 4,
+      mouthOpen: clamp(0.12 + 0.88 * Math.pow(speech, 1.4), 0, 1),
+      smile: 0.3 + 0.2 * Math.sin(t * 0.9),
+      blink: blink,
+      lookX: Math.sin(t * 0.4 + 0.5) * 0.7,
+      lookY: Math.sin(t * 0.27) * 0.5,
+      glasses: 0,
+      expression: 'neutral'
+    };
+  }
+
+  return {
+    renderHead: renderHead,
+    animateParams: animateParams,
+    presets: PRESETS,
+    frame: frame,
+    RAMP: RAMP
+  };
+});
+var FACES = {"generated":"2026-09-07T22:04:43.147Z","count":29,"items":[{"id":1,"title":"Каомодзи (однострочные лица / эмотиконки)","artist":"Каомодзи (однострочные лица / эмотиконки)","art":"( ͡° ͜ʖ ͡°)        — лени-фейс\n( ͡°ᴥ ͡° ʋ)        — собачка\n(╯°□°）╯︵ ┻━┻    — переворот стола\n¯\\_(ツ)_/¯       — пожимание плечами\n(ಠ_ಠ)           — взгляд неодобрения\n(ಠ‿ಠ)           — радостный взгляд\n(⌐■_■)          — крутой в очках\n(◕‿◕)           — милота\n(⊙▃⊙)           — таращится\n(⊙ω⊙)           — удивлён\nʕ•ᴥ•ʔ           — медвежонок\n(ᵔᴥᵔ)           — тюлень\n(☞ﾟ∀ﾟ)☞         — указующий\n(づ｡◕‿‿◕｡)づ     — обнимашки\n(ノಠ益ಠ)ノ彡┻━┻  — переворот с гневом\n(ಥ_ಥ)           — плачет\n(◣_◢)           — злость\n(╬ Ò﹏Ó)         — РАЗОЗЛИЛСЯ\n(+_+)           — мёртв\n('◉⌓◉’)         — шок\n(Figure.eyes)    — (づ◕‿◕)づ\n(●´ω｀●)         — смущение\n(⚆ _ ⚆)         — нейтральный взгляд\n(ʘ‿ʘ)           — широко раскрытые глаза\n( ﾟヮﾟ)          — восторг\n(¬_¬)           — скепсис\n(；一_一)         — молчаливый взгляд\n(ง •̀_•́)ง        — боевой взгляд\n(ノ・∀・)ノ       — приветствие\n┌( ಠ_ಠ)┘        — подозрительный\n(ó ì_í)         — усталый\n(＃￣ω￣)        — недовольный\n(°ロ°)☝         — озарение\n(ノ゜゜)ノ        — паника\n(´；ω；`)        — грусть\n(ò_ó)          — вызов\n(￣o￣)          — спокойствие\n(⌐▨_▨)          — смотрящий через очки\n(╥﹏╥)          — рыдает\n(≧∇≦)          — визг радости\nt(-.-t)          — скрещенные руки\n=^.^=           — кошачий\n(۶ꈨຶꎁꈨຶ )۶     — крик\n(๑>ᴗ<๑)         — хвастается"},{"id":2,"title":"Классическое лицо-«поклон»","artist":"Elissa Potier (asciiart.eu)","art":" 0///-\\\\\\\n|^   ^|\n|O   O|\n|  ~ *slap*!\n \\ O /\n  | |"},{"id":3,"title":"Улыбающееся лицо","artist":"неизвестен (asciiart.eu)","art":"   _____\n _/ _ _ \\_\n(o / | \\ o)\n || o|o ||\n | \\_|_/ |\n |  ___  |\n | (___) |\n |\\_____/|\n | \\___/ |\n \\       /\n  \\__ __/\n     U"},{"id":4,"title":"Лицо в очках","artist":"Sherry Stowers (asciiart.eu)","art":" ....,       ,....\n.' ,,, '.   .' ,,, '.\n .`   `.     .`   `.\n: ..... :   : ..... :\n:`~'-'-`:   :`-'-'~`:\n `.~-`.'     `.~`'.'"},{"id":5,"title":"Смайлик-кадет","artist":"неизвестен (asciiart.eu)","art":"   .------\\ /------.\n   |       -       |\n   |               |\n   |               |\n   |               |\n_______________________\n===========.===========\n  / ~~~~~     ~~~~~ \\\n /|     |     |\\\n W   ---  / \\  ---   W\n \\.      |o o|      ./\n  |                 |\n  \\    #########    /\n   \\  ## ----- ##  /\n    \\##         ##/\n     \\_____v_____/"},{"id":6,"title":"Четыре выражения лица","artist":"неизвестен (asciiart.eu) — нарисовано одним шрифтом: удивление, шок, грусть, умиление.","art":"      ***           @@@@@@@       #############       .:::::::::::::.\n    *******         @@  @@@@      ##         ##      .::'  '''''  '::.\n   *********       @@    @@@      #  ~~   ~~  #      :::           :::\n/\\* ### ### */\\    @ 0  0 @@@     #  ()   ()  #      :::           :::\n|    @ / @    |   @@  I   @@@@    (     ^     )      :::           :::\n\\/\\    ^    /\\/   @@      @@@@     |         |       ::'           ':: \n   \\  ===  /      @@  ==  @@@      |  {===}  |      : : /~~~' '~~~\\ : :\n    \\_____/        @+     @@        \\       /       :(:  <o> | <o>  :):\n     _|_|_         @+++  +@@       /  -----  \\       '.:     / \\     :.\n  *$$$$$$$$$*       @+   +@     ---  |%\\ /%|  ---    ':    (. .)    :'\n                     +88$8     /     |%%%%%|     \\    '.  .:::::.  .'\n                                     |%/ \\%|           :  <----->  :\n                                                       '.  ~:::~  .'\n                                                         '.  '  .'\n                                                           '''''"},{"id":7,"title":"Котолицо","artist":"ScS (asciiart.eu)","art":"      .._..\n    .'     '.   ScS\n   `.~~~~~~~.`\n     `-...-`"},{"id":8,"title":"Портрет из «$» и «#» (взгляд крупным планом)","artist":"David Palmer (`dp`, asciiart.eu)","art":"                             ################    #########\n                           ################### ##############\n                         ################################# #####\n                       ################################### ###  #\n                    ####################################### ###  '\n                   ######################################### ####\n                 ############################################  ######\n                ###############################################   #  #\n              ###################################################   #  #\n             #####################################################   #   #\n            #######################################################   #    #\n           #########################################################   #     #\n          ###########################################################    #    #\n         ########################  ######### # # # #  ################     #   #\n        ########################  # #######  # # # #   ################     #   #\n       ########################  # ## ####   # # # #   # ##############      #  #\n      ########################  # ## ## ##  #  # # #   # ## #### # #####      # '\n     #########################  # # # ## #  ' # #  #  #  ## #### # ######      #\n    # ########################   # ## ## #   # #  #  #  ## ####  # #######      #\n   #   ######################    # #  # # .  ' #  #  '  # # # # . # #######     '\n  ##   ######################   # #  # #  A   #  #     # # # #  A # ########\n #    #######################   ##  #  # .$. #  #     # # # #   $ #  ########\n#     #######################   #  #  # .$$$.# #      ##  ' '  .$.#  #########\n'     ## ####################   '  ' .s$$$$$$$$$$S.   ''     .s$$$.  #########\n    ## #####################     .sS$$$$$$$$$$$$$$$'     .sS$$$$$$s. ###### ###\n   ##  ####################     $$$$$$$$.-'\"\"'-$$$.      ;$$$.-.$$$$$s##### ####\n   '  #####################      `$$'$$$/ () \\ `.$$       ;$/() \\`$$$####### ###\n      #####################         $$$$Ss...sS$$$$        ;Ss...sS$ ########  ##\n     ######################         `$$$$$$$$$$$$$'        .$$$$$$$$ ########   #\n    #######################           `$$$$$$$$$'          `$$$$$$$' ### ####    `\n   ######################## `.           `$$$$'             `$$$$$'  #### ###\n  #########################   .            $'                `.`$'   ##### ##\n ###########################  :            $                  ; $    ###### ##\n###########################                V      :           ; V    ####### #\n#### ######################    `           '      `._'\"`.   .'  '   #########'\n##   ######################                              `-'  .     ##########\n#   #######################                  .                `.   ######### ##\n#  ########################                 '                  .   ######### ###\n'  ########################                ;       _.----._    `   ########## ##\n  ##########################               '  _.-'T~T~T~T~T`.     ############ ##\n ############################`.             .$$`\"\"\"\"------\"\"' $  ######### ### ##\n ## #########################  `.         .$'   `-._     _.-' $ ########## #### #\n ## ##########################   `.       $'        \"\"\"\"\"\"'   $ ########## #### #\n # ###########################     `.    $                    $########### #### `\n '############################       `.  $'                   ############ ###\n # ############################        `._                  .'###  #### ## ###\n '  ############### ############         `.                .'  #   #### ## ##\n  ################# # ############         `-._       __..-'   #    ### ##  #\n   # ## # # ### ##  # ## #########             `\"\"\"\"\"'.'       #    ### ##  '\n   # #  # # ##  #   # ##  ###### ##                 .' `-.._   #     ## #\n   # #  ##   #  #   #  #   #####  #                 ;        `-.     #  #\n   .-'  ''   #  '   #  '    ####  #                :             `-. #  '\n .'          '      '        # #  .                :                `-.  dp\n                             ' '"},{"id":9,"title":"Портрет с вьющимися волосами","artist":"Anthony Thyssen (asciiart.eu)","art":"                        ;;\\\\/;;;;;;;;\n                   ;;;;;;;;;;;;;;;;;;;\n                ;;;;;;;;;;;;     ;;;;;\n               ;;;;;    ;;;         \\;;;\n              ;;;;;      ;;          |;;\n             ;;;;         ;          |\n             ;;;                     |\n              ;;                     )\n               \\    ~~~~ ~~~~~~~    /\n                \\    ~~~~~~~  ~~   /\n              |\\ \\                / /|\n               \\\\| %%%%%    %%%%% |//\n              [[====================]]\n               | |  ^          ^  | |\n               | | :@: |/  \\| :@: | | |\n                \\______/\\  /\\______/\n                 |     (@\\/@)     |\n                /                  \\\n               /  ;-----\\  ______;  \\\n               \\         \\/         /\n                )                  (\n               /                    \\\n               \\__                  /\n                \\_                _/\n                 \\______/\\/\\______/\n                  _|    /--\\    |_\n                 /%%\\  /\"'\"'\\  /%%\\\n  ______________/%%%%\\/\\'\"'\"/\\/%%%%\\______________\n / :  :  :  /  .\\%%%%%%%\\\"'/%%%%%%%/.  \\  :  :  : \\\n)  :  :  :  \\.  .\\%%%%%%/'\"\\%%%%%%/.  ./  :  :  :  ("},{"id":10,"title":"«Лицо Боба» (The face of Bob)","artist":"неизвестен (asciiart.eu) — легендарный детальный портрет 60×73.","art":"                     $$$$$$$$$$$$$$$$$$$$$$\n                  $$$$$$$$$$$$$$$$$$$$$$$$$$$$\n                $$$$$$$$$$$$$$$$$$$$$$$$$$$ $$$$$\n               $$$$$$$$$$$$$$  $$$$$$$$$  $$   $ $$$$\n             $$$$$$$$$$$   $$   $$$  $$  $   $  $$$$\n            $$$$%$$$  $ $   $$   $$$  $  $   $$ $ $$\n           $$$$%%$$$   $ $   $$   $$$  $  $$  $ $ $$$\n          $$$$$%%$$$$  $ $    $    $$  $  $$$ $ $$ $$$$\n         $$$$$%%%$$$$$ $$$$   $  $ $$   $ $$$$$ $$ $$$$$\n        $$$$$$%%%$$$$$$$$$$$  $$ $ $$$$ $ $$$$$$$$$$$$$$$$\n       $$$$$$%%%$$$$$$$$$$$$$$$ $$$$$$ $$$$$$$$$$$$$$$$$$$\n      $$$$$$%%%$$%%%%%%$$$$$$$$$$$$$$$ $$$$$$$$$   $$$$$$$$\n      $$$$$$%%$$%%%%%%%%%$$$$$$$$$$$$$ $$$$$$$     $$$$%$$$\n      $$$$$$%$$%%%%%%%%%%%$$$$$$$$$$$$$$$$$        $$$$%%$$$\n      $$$$$$$$%%%%%%%%%%%%%$$$$$$$$$$$             $$$$%%$$$\n     $$$$$$$%%%            $$$$$$$$                 $$$%%$$$\n     $$$$$$%%%                                      $$$%%$$\n     $$$$$$%%%                                      $$$%%$$\n     $$$$$%%%%                                    % $$$%%$$\n     $$$$$%%%%                                    %  $$%%$$\n     $$$$$%%%%                                    %  $$%%$$\n     $$$$$%%%%                                   %%  $$$%$$\n     $$$$$%%%%                                  %%%  $$$%$$\n     $$$$$%%%%                                   %%  $$$%$$\n     $$$$$%%%%                                   %%  $$$%$$\n     $$$$$%%%%                                   %%  $$$%$$\n      $$$$%%%%                             $$$$  %% $$$$%$$\n     $ $$$%%%% $$$$$$$$$                $$$$$$$$$%% $$$$$$$\n    $$$ $$%%%  $$$$$$$$$$              $$$$$$$$$$$%% $$$$$$\n    $$$$  %%%          $$$           $$$$       $$%% $$$$$$\n    $$$$$$%%%    $$$$$ $$$$         $$$$$$$$$$   $%% $$$$$$\n     $$$$ %%%  $$$     $$$$$       $$$$$$    $$$  %%% $$$$$\n     $$$$     $$$$$$$$$ $$$$      $$$$$$$$$$$$$$   %  $$$$$\n     $$$$     $$$  $ $$  $$$$    $$$$$$  $ $  $$      $$$$\n     $$$$      $   $$$ %%%$$$         %% $$$          $$$$\n     $$$$             %%%% $$         %%%%%%  %%%     $$$$\n      $$$$      %%% %%%%%   $           %%%%%%%       $$$$\n      $$$$        %%%%%    $$             %%%         $$ $\n      $$ $          %%     $                          $ $$\n      $ $$                 $                          $  $\n      $ $$  $             %$                         $$  $\n      $  $  $            %%$                          $$$$\n       $$$  $$         $ %%%                       $ $ $$\n        $$  $$        $ %%%%          $ $$$       $$ $\n         $ $$$     $$  %%%%        $$$  $$$     $$$ $\n         $ $$$    $$  %%%$$$     $$$$    $$$$  $$$$ $\n         $$$$$$$$$$   $$$$$$$$$$$$$$      $$$$$$$$$ $\n          $$$$$$$   $$$$$$$$$$$$$$         $$$$$$$$ $\n          $$$$$$ %%$$$$$$$$$$$$$$      $$$$$$$$$$$$$$\n          $$$ $$  %$$$$$$$$$$      $$$$$$$$$    $$$$\n           $$  $   $$$$     $$$$$$$$    $$      $$$\n           $$  $   %$$$$               $$      $$$$\n            $  $   %%%%$$$ $$$$$$$$$$$$$       $$$\n            $$ $$   %%%%             $$       $$$$\n            $$ $$    %%$$$$ $$$$$$$$$$        $$$\n             $  $    $$$$$%%%%%%%%%%         $$$$\n             $$ $$  $$$$$%%%                 $$$\n              $  $ $$$$ %%%%%%%%%%%%%%      $$$\n              $$  $$$$  %%%%%%%%%%%%%       $$$\n     $$$       $ $$$$   $%%%%              $$$\n   $$   $$      $$$$$  $$$$               $$$\n  $  $$  $$   $$$$$$   $$$                $$$\n $ $$$$  $$  $$$$$$   $$$$               $$$\n$  $$$  $$$ $$$$$$ $$$$$$$              $$$\n$      $$$$$$$$$$   $$$$$$             $$$\n$  $$   $$$$$$$$     $$$$$$$$$$$$$$$  $$$\n$$$$$   $$$$$$$       $$$$$$$$$$$$$$$$$$\n$$$$$$   $$$$$                  $$$$$$\n $$$$$   $$$$\n $$$$$$  $$$\n  $$$$$  $$$\n   $$$$$$$$\n    $$$$$$"},{"id":11,"title":"Аль Пачино","artist":"`jgs` (Joan G. Stark) — asciiart.eu/people/famous","art":"            -''--.\n     _`>   `\\.-'<\n  _.'     _     '.\n.'   _.='   '=._  '.\n>_   / /_\\ /_\\ \\  _<\n  / (  \\o/\\\\o/  ) \\\n  >._\\ .-,_)-. /_.<\n      /__/ \\__\\  jgs"},{"id":12,"title":"Альберт Эйнштейн","artist":"`a:f` (Andreas Freise) — asciiart.eu/people/famous","art":"    /   \\\n   _\\___/_\n  '->---<-'\n   ( ^ ^ )\n    \\ # /\n  __/'-'\\__\n /  \\/'\\/mb\\\n/ _/ a:f mic\\"},{"id":13,"title":"Джордж Вашингтон","artist":"`jgs` — asciiart.eu/people/famous","art":"     .-\"\"\"\"\"-.\n  .-\"         \"-.\n_/               \\_\n\\     .-\"\"\"\"\"-.    /\n '---//o   o\\\\----'\n    (    _\\   )\n ,___`\\  =  /`___,\n/ \\  `;'---' ` jgs\\"},{"id":14,"title":"Наполеон","artist":"`snd` (Shanaka Dias) — asciiart.eu/people/famous","art":" <((((((\\\\\\\n    /      . }\\\n    ;--..--._|}\n    '--/\\--'  )\n    | '-'  :'|\n    . -==- .-|\n     \\.__.'   \\--._\n __.--|       //snd"},{"id":15,"title":"Принцесса Диана","artist":"`snd` (Shanaka Dias) — asciiart.eu/people/famous","art":"   _,--.\n  (.-'-.\\\n  /|a,a|)\\\n  )\\ _ /|\\\n _//'-(_<_\\\n/-__  / .-.\\\n        snd"},{"id":16,"title":"Шер","artist":"`jgs` — asciiart.eu/people/famous","art":"   .-'~\"-.\n  / `-    \\\n />  `.  -.|\n/_     '-.__)\n |-  _.' \\ |\n `~~;     \\\\\n    /      \\)\njgs'.___.-'`\""},{"id":17,"title":"Прочие лица (Other)","artist":"Dana — asciiart.eu/people/famous","art":" .-\"\"-.\n / _____)\n{  __/ a\\\n{  _/    >\n { C    =\n  {!\\_ _/\n ____| |__\nDana(\\ |) \\"},{"id":18,"title":"Чарли Чаплин (детальный портрет)","artist":"Margerita Baus (дружок: Andreas Freise) — asciiart.website/art/6492","art":"                                                        _._\n          .'   `.\n          |     |\n         \"=======\"\n          $ ^ ^ $\n          `  #  '\n           `._.'\n        _.'< ' >'-._\n      .'    \\ /     '\n     /       v       \\\n    / .     .:    .   |\n   .   `'   .:     `  '\n   :   `     :.    `. :\n   :.  `    /  \\    : :\n   <   )   /    \\   : :\n   :   ` `*=---=*   . /\n    :  )  |  ' ` )  \\`\n    `.'  :;  |   (   `\\.\n     \\(   /  |.   \\  ) ) `\n     ( `-'  _Y-    `'\\'\n     \\       |       )\\\n      )      :       ) \\\n      :     . \\   ` |   \\\n      ` ,   ( :  . :'    \\\n       \\    ` |    .      \\\n        :   | '    )       \\\n         \\  : )  .'  mb     \\\n        .'  | |  (    a:f    \\\n         (__| (__)            \\\n.__.--..'   ; |   `-..--.--,   \\\n+._____.-=__] [__.--===::-'"},{"id":19,"title":"Леонард Нимой / Мистер Спок","artist":"F. Wiese — asciiart.website/art/5770","art":"                                                                    .ss$$$$$$$$$$$$$$$ss.\n                   .s$$$$$$$$$$$$$$$$$$$$$$$$$$ss.\n               .s$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$s\n             .$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$.\n           .$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$s\n         .$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$s.\n        $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n      .$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n      $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n    .$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n    $$$$$$$$$$$$$$$$$$$$                                  $$\n    $$$$$$$$$$$$$$$$$$     .\n   s$$$$$$$$$$$$$$$$$     sssss.                           s\n  ss $$$$$$$$$$$$$$$          ssss                      ss$s\n sss   $$$$$$$$$$$            ssss$$$$ss              $$$$s.\nsssss   $$$$$$$$   s.      .sss$$$$$$$$sss      sss$$$$$$s\nss$ssss  $$$$$$$  sss.  .ss$$$$$$ss$ss     .         s$$$$s.\nss$s   s  $$$$$$ ss.ss           ..        ss           .sss\n ss   s $s $$$$$ ss..s.                   ss\n  s ss$$$$s $$$$ ssssss.                 .ss\nss     s$$$s $$$ ssssssssss..           ssss.              .\nss      $$  s $$ ss..ss$$$$sss        .sssss              ..\n s      s$$ss  $ ssss.sss$$$sss       .sssss.     ss..\n  s.     $     $ .sss . .ss$sss        .  sssssss...   ss$\n    ss   sssss$$ ..ss   ...sssss            .sss.       s\n      ss    $$ $ .ss..s .sssssss\n        ss$$  $$  .ssssss .sssss              ..       $\n            $$$$  .ss$$ssss...s.s        ..sss$$ssss.\n           $$.$$$  .ss$$sss.. sss.    .ssss$$s..s$ss. s\n           ss ssss  .sssssss...sss.      .ssss$$ss..  .\n           ss  ssss   .ssssssss.sss.        .sss.\n           ss    .ssss    .sssssssss.               s\n           ss      .sssss.  .sssssss.s .. ..ss$s. .s\n          ss         sssssss.  .sssssssssssss$$s. .ss\n        $ss           ssssssss.   ..sssssssssss  .ss.\n      $$$$.            .sssssssss.     ssssss ssss.$s\n  s$$$$$$$$s.             ..ssssssssss......ssss. s$$$s\n.s$$$$$$$$$$$s.              .ssssssssssssssss. s$$$$$ss.\n   s$$$$$$$$$$$$$$ss..          .ssssssssss. .s$$$$$$$$s\n     s$$$$$$$$$$$$$$$$$$$ssss...   ...ss.. s$$$$$$$$$s\n       s$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$s\n          .s$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$s\n                .s$$$$$$$$$$$$$$$$$$$$$$$$$$$$$s\n                      .s$$$$$$$$$$$$$$$$$$$$s\n                            ..s$$$$$$$$$$s"},{"id":20,"title":"J. Melusky","artist":"J. Melusky","art":"                                              /'~~~~~~~\\|/\n                                            ,/'     ____ `\\\n    ffffff'    '   'Y||                   |   ,,__/    '| \\\n    |||||l ,--   --.|||                  ,|_./___   ___ |  |\n    jjj|l`  ,-.  ,-.|ll                     |-(  .)-(.  )`|,'\n    ,-```  f  | f  ||-.                   (|  ~~~   ~~~   |)\n    l (|   l_0, l_0,| j                    |     `-'      |'\n     Y |       `.   |f                     \\   ,____,   /\n     `-|,        )  l'                      \\   `--'   /\n       ||f ,-  `--'  _ Y                    |\\______/|\n       jjj  `.       ,`|                    |\\________/|\n       '''\\   `-----'  j                    \\----------/\n           |.        ,'\n           | `-._.,'-"},{"id":21,"title":"Майк Росулек (Mike Rosulek)","artist":"Майк Росулек (Mike Rosulek)","art":"   .------.        An honest effort at trying to make\n  /  ____  \\       a self portrait cartoon.  I think I\n / __|__|__ \\      messed up the pony tail and backwards\n_||/  \\/  \\||_     hat.  But I'm still getting the hang\n/ )/   00   \\( \\   of it...\n| (   /  \\   ) |\n\\__\\_(    )_/__/\n/ /   \\__/   \\ \\\n|(  (\\____/)  )|\n|/\\   ----   / |            Joey Millison\n /\\\\\\        /_/\n//|\\|\\______/|\n//|\\\\________/|\n///|\\\\\\--------/\n////|\\\\\\\\\n ///|\\\\\\\\Bad\n  //|\\\\\\\\Religion\n   /|\\\\\\\\"},{"id":22,"title":"Вероника Карлссон (VK)","artist":"Вероника Карлссон (VK)","art":"     |||||\n    ||. .||\n   |||\\=/|||\n   |.-- --.|\n   /(.) (.)\\\n  \\ ) . ( /\n  '(  v  )`\n    \\ | /\n VK ( | )\n    '- -`"},{"id":23,"title":"Джоан Старк (jgs)","artist":"Джоан Старк (jgs)","art":"        .{{}}}}}}.\n       {{{{{}}}}}}}.\n      {{{{  }}}}}}}}}\n     }}}}} _   _ {{{{\n     }}}}  6   6  {{\n    {{{{{    ^    }}}}\n   {{{{{{\\  -=-  /}}}}}}\n   {{{{{{{;.___.;}}}}}}}\n    {{{{{{{)   (}}}}}}}'\n     `\"\"'\"':   :'\"'\"'`\n   jgs      `@`"},{"id":24,"title":"Шаnaka Dias (snd)","artist":"Шаnaka Dias (snd)","art":"        |||||\n       ||. .||\n      |||\\=/|||\n      |.--:--.|\n     /( ):( )\\\n     \\ ) : ( /\n     '(__:__)`\n       \\ | /\n       ( | )\n       '- -`\n        snd"},{"id":25,"title":"Андреас Фрайзе (a:f)","artist":"Андреас Фрайзе (a:f)","art":"         __.._\n        |  / \\ \\\n        ---___\\_|_\n        ###  _  _\\.  \\.\n        #@#  0  0  ---\n        #      \\\n      _/ \\  '--\n .---'\\\\_-`\\   |"},{"id":26,"title":"ллizard aka ejm","artist":"ллizard aka ejm","art":"                   |||||\n                  ||. .||\n                 |||\\=/|||\n                 |.--:--.|\n                /( ):( )\\\n                \\ ) : ( /\n                '(__:__)`\n                  \\ | /\n                  ( | )\n                  '- -`\n                      ejm"},{"id":27,"title":"SheDragon (ldb)","artist":"SheDragon (ldb)","art":"        .-----.\n       /())))))\\\n      (((@)-(@)))\n      ())  L  (()\n       )(\\ - /)(\n       ())`-`(()  ldb"},{"id":28,"title":"Bluepard (BP) — «мой реальный автопортрет»","artist":"Bluepard (BP) — «мой реальный автопортрет»","art":"          .------.\n        .'    .'  \\\n       ':   /   : |\n      '':_.'____ - '.\n      ' .^/ \\^_/  |).'\n      '  '` .     '|`'\n      '  ` ~'  .  \\'\n      `.  `.. '    '.__\n          //.\\ ..''    '---.\n         .\\\\ \\              '.\n         '// /               'BP\n         '\\\\/                '\n           `\n               BluePard"},{"id":29,"title":"Арan Кунтзе (Aran Kuntze)","artist":"Арan Кунтзе (Aran Kuntze)","art":"            _,_,,,_,_\n         ,_=\\\\\\\\/////=-_\n        ,//,-\"\"-,-\"\"-.\\\\\\\n       .///           \\\\\\'\n       =/||,-== \\ ===.\\|\\=\n       =(|| <o> | <o> :\\\\=\n        \\\\|    ; :    :!=\n         \\| \\  `-'  / :,\\\n          '\\   -==-   ;|\n           \\_  \"\"  _/\n       ctr ; '----' :"}]};
+(function () {
+  var F = FACES;
+  var sideCol = document.getElementById('col-sidebar');
+  var sideHead = document.getElementById('head-sidebar');
+  var stage = document.getElementById('stage');
+  var tabs = document.querySelectorAll('.tab');
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  var filterBox = document.createElement('input');
+  filterBox.type = 'search';
+  filterBox.placeholder = 'фильтр по названию/автору…';
+  sideCol.appendChild(filterBox);
+
+  var list = document.createElement('div');
+  sideCol.appendChild(list);
+
+  var current = 0;
+  function renderList() {
+    var q = filterBox.value.toLowerCase();
+    list.innerHTML = '';
+    F.items.forEach(function (it) {
+      if (q && it.title.toLowerCase().indexOf(q) < 0 && it.artist.toLowerCase().indexOf(q) < 0) return;
+      var d = document.createElement('div');
+      d.className = 'list-item' + (it.id === current ? ' active' : '');
+      d.innerHTML = '<div><span class="num">#' + it.id + '</span> ' + esc(it.title) + '</div><div class="who">' + esc(it.artist) + '</div>';
+      d.onclick = function () { current = it.id; renderList(); showIt(); };
+      list.appendChild(d);
+    });
+  }
+  filterBox.oninput = renderList;
+
+  function showIt() {
+    var it = F.items.filter(function (x) { return x.id === current; })[0] || F.items[0];
+    stage.innerHTML = '';
+    var h = document.createElement('div');
+    h.innerHTML = '<div><b>' + esc(it.title) + '</b> <span class="artist">· ' + esc(it.artist) + '</span></div>' +
+      '<div class="hash">#' + it.id + ' · ' + it.art.length + ' символов</div>';
+    var pre = document.createElement('pre');
+    pre.className = 'art';
+    pre.textContent = it.art;
+    stage.appendChild(h);
+    stage.appendChild(pre);
+  }
+
+  function onTab(name) {
+    tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === name); });
+    var col = name === 'col';
+    sideCol.style.display = col ? 'block' : 'none';
+    sideHead.style.display = col ? 'none' : 'block';
+    if (col) showIt(); else renderHeadStatic();
+  }
+  tabs.forEach(function (t) { t.onclick = function () { onTab(t.dataset.tab); }; });
+
+  var p = {
+    mouthOpen: 0.3, smile: 0.3, roll: 0, pitch: 0,
+    lookX: 0, lookY: 0, blink: 0, glasses: 0, expression: 'neutral', width: 52, height: 26
+  };
+  function renderHeadStatic() {
+    var rows = AsciiLab.renderHead(p);
+    document.getElementById('head-prev').textContent = rows.join('\n');
+  }
+  function bind(id, out, fmt, key) {
+    document.getElementById(id).addEventListener('input', function () {
+      p[key] = parseFloat(this.value);
+      document.getElementById(out).textContent = fmt(this.value);
+    });
+  }
+  bind('pMouth', 'oMouth', function (v) { return (+v).toFixed(2); }, 'mouthOpen');
+  bind('pSmile', 'oSmile', function (v) { return (+v).toFixed(2); }, 'smile');
+  bind('pRoll', 'oRoll', function (v) { return v + '°'; }, 'roll');
+  bind('pPitch', 'oPitch', function (v) { return v + '°'; }, 'pitch');
+  bind('pLookX', 'oLookX', function (v) { return (+v).toFixed(2); }, 'lookX');
+  bind('pLookY', 'oLookY', function (v) { return (+v).toFixed(2); }, 'lookY');
+  bind('pBlink', 'oBlink', function (v) { return v ? 'закрыто' : 'откр'; }, 'blink');
+  document.getElementById('pGlasses').onchange = function () { p.glasses = this.checked ? 1 : 0; renderHeadStatic(); };
+
+  var presetBox = document.getElementById('presets');
+  AsciiLab.presets().forEach(function (pr) {
+    var b = document.createElement('button');
+    b.className = 'btn';
+    b.textContent = pr.name;
+    b.onclick = function () {
+      Object.keys(pr).forEach(function (k) { if (k !== 'name') p[k] = pr[k]; });
+      syncControls(); renderHeadStatic();
+    };
+    presetBox.appendChild(b);
+  });
+  function syncControls() {
+    document.getElementById('pMouth').value = p.mouthOpen;
+    document.getElementById('oMouth').textContent = (+p.mouthOpen).toFixed(2);
+    document.getElementById('pSmile').value = p.smile;
+    document.getElementById('oSmile').textContent = (+p.smile).toFixed(2);
+    document.getElementById('pRoll').value = p.roll;
+    document.getElementById('oRoll').textContent = p.roll + '°';
+    document.getElementById('pPitch').value = p.pitch;
+    document.getElementById('oPitch').textContent = p.pitch + '°';
+    document.getElementById('pLookX').value = p.lookX;
+    document.getElementById('oLookX').textContent = (+p.lookX).toFixed(2);
+    document.getElementById('pLookY').value = p.lookY;
+    document.getElementById('oLookY').textContent = (+p.lookY).toFixed(2);
+    document.getElementById('pBlink').value = p.blink;
+    document.getElementById('oBlink').textContent = p.blink ? 'закрыто' : 'откр';
+    document.getElementById('pGlasses').checked = !!p.glasses;
+  }
+
+  var animBox = document.getElementById('anim');
+  var t0 = null;
+  function loop(ts) {
+    if (!t0) t0 = ts;
+    if (animBox.checked) {
+      var t = (ts - t0) / 1000;
+      var ap = AsciiLab.animateParams(t);
+      Object.keys(ap).forEach(function (k) { p[k] = ap[k]; });
+      p.expression = 'neutral';
+      renderHeadStatic();
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  renderList();
+  showIt();
+})();
+</script>
+</body>
+</html>
