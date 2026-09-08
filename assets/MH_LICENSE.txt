@@ -1,0 +1,6 @@
+makehuman_base.obj is from MakeHuman Community (https://github.com/makehumancommunity/makehuman)
+Released as CC0 in September 2020.
+Copyright (C) 2020 Data Collection AB, https://www.datacollection.se
+Copyright (C) 2020 Joel Palmius
+Copyright (C) 2020 Jonas Hauquier
+See https://github.com/makehumancommunity/makehuman/blob/master/license.txt
