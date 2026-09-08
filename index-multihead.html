@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Matrix Face — Multi-View (MakeHuman CC0)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
+  .topbar { padding: 8px 14px; color: #0a0; font-size: 12px; border-bottom: 1px solid #050; }
+  .topbar a { color: #0a0; margin-right: 12px; text-decoration: none; }
+  .label-row { display: flex; gap: 4px; padding-left: 4px; }
+  .label-cell { font-size: 11px; color: #0a0; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <strong>MATRIX FACE — 3 VIEW × 3 VARIANT</strong>
+  (MakeHuman CC0 — m0_default · m1_female · m2_male · m3_child)
+  <span id="sel"></span>
+</div>
+<div class="label-row" id="labels"></div>
+<canvas id="c"></canvas>
+
+<script type="module">
+import { renderMultiView, type HeadVariant, type ViewSpec } from './mhface3d.js';
+
+const VARIANTS: HeadVariant[] = ['default', 'female', 'male', 'child'];
+const VIEWS: ViewSpec[] = [
+  { rx: 0, ry: 0, rz: 0, label: 'FRONT' },
+  { rx: 0, ry: -0.6, rz: 0, label: '3/4' },
+  { rx: 0, ry: -Math.PI / 1.4, rz: 0, label: 'SIDE' },
+];
+
+const cellW = 6, cellH = 12;
+const panelW = 40, panelH = 32;
+const cols = 3 * panelW + 2;  // 3 viewports × 3 variants
+const rows = 4 * panelH + 3;
+const W = cols * cellW, H = rows * cellH;
+
+const canvas = document.getElementById('c') as HTMLCanvasElement;
+canvas.width = W; canvas.height = H;
+const ctx = canvas.getContext('2d')!;
+ctx.fillStyle = '#000';
+ctx.fillRect(0, 0, W, H);
+ctx.font = `${cellH}px "Courier New", monospace`;
+ctx.textBaseline = 'top';
+
+const labelRow = document.getElementById('labels') as HTMLDivElement;
+
+async function renderAll() {
+  for (let vi = 0; vi < VARIANTS.length; vi++) {
+    const v = VARIANTS[vi];
+    const res = renderMultiView(v, VIEWS, panelW, panelH);
+    for (let pi = 0; pi < VIEWS.length; pi++) {
+      const px0 = pi * (panelW + 1) * cellW;
+      const py0 = vi * (panelH + 1) * cellH;
+      for (let j = 0; j < panelH; j++) {
+        for (let i = 0; i < panelW; i++) {
+          const idx = j * (panelW * VIEWS.length + 0) + (pi * (panelW + 1) + i);
+          const ch = res.chars[idx];
+          if (ch && ch !== ' ') {
+            ctx.fillStyle = `rgb(${res.r[idx]},${res.g[idx]},${res.b[idx]})`;
+            ctx.fillText(ch, px0 + i * cellW, py0 + j * cellH);
+          }
+        }
+      }
+    }
+  }
+  // draw labels: rows = variants, cols = views
+  labelRow.style.gap = cellW + 'px';
+  labelRow.style.paddingLeft = cellW + 'px';
+  for (let pi = 0; pi < VIEWS.length; pi++) {
+    const lbl = document.createElement('div');
+    lbl.className = 'label-cell';
+    lbl.style.width = (panelW * cellW) + 'px';
+    lbl.textContent = VIEWS[pi].label;
+    labelRow.appendChild(lbl);
+  }
+  // vertical variant labels (drawn into canvas)
+  for (let vi = 0; vi < VARIANTS.length; vi++) {
+    ctx.fillStyle = '#0a0';
+    ctx.fillText(VARIANTS[vi].toUpperCase(), 2, vi * (panelH + 1) * cellH + panelH * cellH / 2);
+  }
+}
+
+renderAll();
+</script>
+</body>
+</html>

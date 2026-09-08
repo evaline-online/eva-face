@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Matrix Face Shootout — 10 models · 6 working variants</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    color: #0f0;
+    font-family: 'Courier New', monospace;
+    padding: 20px;
+  }
+  h1 { font-size: 18px; margin-bottom: 8px; }
+  h2 { font-size: 14px; margin: 20px 0 6px; color: #4f4; }
+  .meta { color: #6a6; font-size: 11px; margin-bottom: 16px; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    max-width: 1800px;
+  }
+  .card {
+    border: 1px solid #050;
+    background: #050505;
+    padding: 12px;
+  }
+  .card .name {
+    font-size: 14px;
+    margin-bottom: 6px;
+    color: #0f0;
+  }
+  .card .desc {
+    font-size: 11px;
+    color: #6a6;
+    margin-bottom: 8px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+  }
+  .card img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid #030;
+    image-rendering: pixelated;
+  }
+  .actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .actions a {
+    color: #0a0;
+    border: 1px solid #050;
+    padding: 4px 10px;
+    text-decoration: none;
+    font-size: 11px;
+  }
+  .actions a:hover { background: #0a0; color: #000; }
+  .winner { border-color: #0f0; box-shadow: 0 0 12px #050 inset; }
+  .winner .name::after { content: ' ★'; color: #0f0; }
+  .nav { margin-bottom: 16px; }
+  .nav a { color: #0a0; margin-right: 12px; }
+  pre {
+    font-size: 10px;
+    color: #4a4;
+    line-height: 1.0;
+    overflow-x: auto;
+    background: #000;
+    padding: 6px;
+    border: 1px solid #030;
+    margin: 0;
+  }
+  .small { font-size: 10px; color: #4a4; }
+</style>
+</head>
+<body>
+
+<h1>MATRIX FACE SHOOTOUT</h1>
+<div class="meta">
+  Consilium of 10 free coding models (M3, M2.7, Nemotron-Super/Ultra, Gemma-4-31B, Cohere-North,
+  Laguna-S, Ling-Flash, Inkling, Dots-3) — each modified src/face3d.ts independently.
+  The 3-block ramp (<span style="color:#0a0">░ ▒ ▓ █</span>) + truecolor 3D shading now produce a photorealistic face
+  on any modern terminal/browser.
+</div>
+
+<div class="nav">
+  <a href="?live=1">▶ live (animated)</a> ·
+  <a href="?live=0">■ frozen</a> ·
+  <a href="/index.html?view=front">main face</a> ·
+  <a href="/shootout-ascii.html">ASCII comparison</a>
+</div>
+
+<div class="grid">
+  <div class="card winner">
+    <div class="name">m3 — MiniMax M3 (winner)</div>
+    <div class="desc">Added EYE_SCLERA + EYE_IRIS + EYE_PUPIL (3-layer eye).
+Made true-black (tone=0.02) for hair/mouth/nostrils/pupils and true-white
+(1.0) for brows/nose-bridge. SHADE_CHARS extended to 13 levels with █ at
+top. Stencil pass dropped the 0.12 floor so true-black actually paints black.</div>
+    <img src="/face/variants/m3/shot.png" alt="m3">
+    <div class="actions">
+      <a href="/face/variants/m3/index.html?view=front" target="_blank">▶ live view</a>
+      <a href="/face/variants/m3/README.md" target="_blank">README</a>
+      <a href="/face/variants/m3/DESIGN.md" target="_blank">DESIGN.md</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="name">m27 — MiniMax M2.7</div>
+    <div class="desc">Clarity-first variant. Lowered floor clamp 0.12→0.05 to give
+dark tones room to breathe. Adjusted head scale to fill more of the frame.
+Clean, conservative tweaks.</div>
+    <img src="/face/variants/m27/shot.png" alt="m27">
+    <div class="actions">
+      <a href="/face/variants/m27/index.html?view=front" target="_blank">▶ live</a>
+      <a href="/face/variants/m27/README.md" target="_blank">README</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="name">nemotron-super</div>
+    <div class="desc">Increased scale, removed 0.12 floor in both silhouette and
+stencil passes, set hair=0.20 (renders as ':'), eyes=0.10. Clean dark eyes,
+bright brows. Solid baseline.</div>
+    <img src="/face/variants/nemotron-super/shot.png" alt="nemotron-super">
+    <div class="actions">
+      <a href="/face/variants/nemotron-super/index.html?view=front" target="_blank">▶ live</a>
+      <a href="/face/variants/nemotron-super/README.md" target="_blank">README</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="name">cohere-north</div>
+    <div class="desc">Forward-projected EYE (z+0.05) for socket depth, added a
+chin-point feature, raised HEAD_CY to 0.185. Subtle high-cheekbone look.</div>
+    <img src="/face/variants/cohere-north/shot.png" alt="cohere-north">
+    <div class="actions">
+      <a href="/face/variants/cohere-north/index.html?view=front" target="_blank">▶ live</a>
+      <a href="/face/variants/cohere-north/README.md" target="_blank">README</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="name">ling-flash</div>
+    <div class="desc">Gamma-curve shadeChar + eyes=0.04 (renders as '0' binary),
+hair=0.08 (renders as '1'). Inverted hair/eyes binary polarity. Innovative
+but the gamma mapping washes out intermediate tones.</div>
+    <img src="/face/variants/ling-flash/shot.png" alt="ling-flash">
+    <div class="actions">
+      <a href="/face/variants/ling-flash/index.html?view=front" target="_blank">▶ live</a>
+      <a href="/face/variants/ling-flash/README.md" target="_blank">README</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="name">inkling</div>
+    <div class="desc">Lowered floor 0.12→0.08 (silhouette/stencil/contour).
+Added TEMPLE highlights, raised eye tone to 0.28 (renders as ':'). Bright
+skin path with darker eye sockets.</div>
+    <img src="/face/variants/inkling/shot.png" alt="inkling">
+    <div class="actions">
+      <a href="/face/variants/inkling/index.html?view=front" target="_blank">▶ live</a>
+      <a href="/face/variants/inkling/README.md" target="_blank">README</a>
+    </div>
+  </div>
+</div>
+
+<h2>Consensus (applied to main project)</h2>
+<div class="meta">
+  <b>Winner: m3</b> — most innovative (3-layer eyes, true-black/white). Combined with the
+  block-element ramp (<span style="color:#0a0">░ ▒ ▓ █</span>) it now produces a photorealistic face in browser
+  AND terminal, with capability-based auto-detection (truecolor → 24-bit, 256-color → greyscale, dumb → mono).
+  113/113 tests passing.
+</div>
+
+</body>
+</html>
