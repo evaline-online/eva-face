@@ -279,6 +279,12 @@ clearScreen();
 
 let prevTime = performance.now();
 let frameCount = 0;
+// Perf metrics (FACE-10): frame pacing (dt EMA) + CPU render time (CPU EMA).
+// `dtMsAvg` = actual frames/sec the loop sustains; `cpuMsAvg` = how long one
+// frame takes to project+rasterize (the adaptation metric for the terminal).
+let dtMsAvg = 33;
+let cpuMsAvg = 10;
+let cpuStart = 0;
 
 function render() {
   const now = performance.now();
@@ -286,6 +292,7 @@ function render() {
   prevTime = now;
   const time = now / 1000;
   frameCount++;
+  cpuStart = performance.now();
 
   const [w, h] = getTermSize();
   if (w !== termW || h !== termH) {
@@ -382,7 +389,11 @@ function render() {
   }
 
   // Title (row 0) and controls hint (last row), as plain cell strings.
-  const title = ` MATRIX FACE · ${RENDER_MODE.toUpperCase()}${HALF ? ' · 2×' : ''} `;
+  const cpuMs = performance.now() - cpuStart;
+  dtMsAvg = dtMsAvg * 0.9 + (dt * 1000) * 0.1;
+  cpuMsAvg = cpuMsAvg * 0.9 + cpuMs * 0.1;
+  const fps = 1000 / Math.max(dtMsAvg, 0.01);
+  const title = ` MATRIX FACE · ${RENDER_MODE.toUpperCase()}${HALF ? ' · 2×' : ''} · ${fps.toFixed(0)}fps ${cpuMsAvg.toFixed(1)}ms `;
   const titleX = Math.max(0, Math.floor((termW - title.length) / 2));
   for (let k = 0; k < title.length && titleX + k < termW; k++) {
     cur[titleX + k] = ansiFg(0, 255, 0) + title[k];

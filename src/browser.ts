@@ -236,19 +236,21 @@ function frame(now: number) {
     if (bt > BENCH_WARMUP) benchSamples.push(dt);
     if (bt >= BENCH_SECONDS) {
       benchDone = true;
+      // benchSamples/dt are frame times in SECONDS. fps = 1/frameSeconds.
       const sorted = benchSamples.slice().sort((a, b) => a - b);
-      const avg = sorted.reduce((s, v) => s + v, 0) / Math.max(1, sorted.length);
-      const pct = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+      const avgMs = (sorted.reduce((s, v) => s + v, 0) / Math.max(1, sorted.length)) * 1000;
+      const pct = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] * 1000;
+      const worstMs = sorted[sorted.length - 1] * 1000;
       benchReport = [
         `BENCH RESULT (${benchSamples.length} frames, 1 full turn)`,
-        `avg      ${(1000 / avg).toFixed(1)} fps  (${(avg * 1000).toFixed(2)} ms)`,
-        `min      ${(1 / sorted[sorted.length - 1]).toFixed(1)} fps  (worst frame ${(sorted[sorted.length - 1] * 1000).toFixed(2)} ms)`,
+        `avg      ${(1000 / avgMs).toFixed(1)} fps  (${avgMs.toFixed(2)} ms)`,
+        `min      ${(1000 / worstMs).toFixed(1)} fps  (worst frame ${worstMs.toFixed(2)} ms)`,
         `p95      ${(1000 / pct(0.95)).toFixed(1)} fps`,
         `p99      ${(1000 / pct(0.99)).toFixed(1)} fps`,
         `quality  ${QUALITY[quality].label} (${QUALITY[quality].cw}x${QUALITY[quality].ch} cells)`,
-        `budget   ${ftAvg > 16.7 ? 'FAIL: below 60fps — quality should step down' : 'PASS: >= 60fps sustained'}`,
+        `budget   ${avgMs > 16.7 ? 'FAIL: below 60fps — quality should step down' : 'PASS: >= 60fps sustained'}`,
       ];
-      (window as any).__benchResult = { frames: benchSamples.length, avgFps: 1000 / avg, minFps: 1 / sorted[sorted.length - 1], quality: QUALITY[quality].label, pass: avg <= 16.7 };
+      (window as any).__benchResult = { frames: benchSamples.length, avgFps: 1000 / avgMs, minFps: 1000 / worstMs, quality: QUALITY[quality].label, pass: avgMs <= 16.7 };
     }
   } else if (URL_VIEW === 'front') {
     // Frozen front view: ignore follow and auto-rotation entirely.

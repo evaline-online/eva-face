@@ -1,0 +1,1 @@
+document.write('<script src="dist/face.js?v=' + Date.now() + '"><\/script>');

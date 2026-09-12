@@ -12,7 +12,7 @@ import { pickChar, blueDither, type GlyphRamp, type RenderMode } from './capabil
 
 
 // Glyph ramp: binary | half | quarter | braille (env FACE_RAMP)
-const GLYPH_RAMP: GlyphRamp = (process.env.FACE_RAMP as GlyphRamp) || 'binary';
+const GLYPH_RAMP: GlyphRamp = (typeof process !== 'undefined' && process.env.FACE_RAMP as GlyphRamp) || 'binary';
 
 // ─── Vector Math ───────────────────────────────────────────────
 
@@ -363,8 +363,8 @@ export const FACE_STENCIL: FaceFeature[] = [
   { name: 'EYE_CATCHLIGHT', lx:  0.137, ly: 0.336, lz: 0.39, rx: 0.022, ry: 0.022, tone: 1.0, occludedGuard: true },
   // Nose bridge — soft highlight column (was tone 1.0, which read as a hard
   // barcode stripe; a gentler 0.62 blends with the geometry shading).
-  { name: 'NOSE_BRIDGE', lx: 0, ly: 0.290, lz: 0.37, rx: 0.055, ry: 0.16, tone: 0.62, occludedGuard: true },
-  { name: 'NOSE_TIP', lx: 0, ly: 0.126, lz: 0.41, rx: 0.07, ry: 0.060, tone: 0.82, occludedGuard: true },
+  { name: 'NOSE_BRIDGE', lx: 0, ly: 0.290, lz: 0.37, rx: 0.055, ry: 0.16, tone: 0.70, occludedGuard: true },
+  { name: 'NOSE_TIP', lx: 0, ly: 0.126, lz: 0.41, rx: 0.07, ry: 0.060, tone: 0.90, occludedGuard: true },
   // Nostril shadows — TRUE BLACK so they punch through.
   { name: 'NOSTRIL', lx: -0.050, ly: 0.095, lz: 0.37, rx: 0.045, ry: 0.030, tone: 0.02, occludedGuard: true },
   { name: 'NOSTRIL', lx:  0.050, ly: 0.095, lz: 0.37, rx: 0.045, ry: 0.030, tone: 0.02, occludedGuard: true },
@@ -599,11 +599,11 @@ export function projectAndShade(
       // Cavity term: surfaces turning AWAY from the key light darken sharply —
       // this is what carves the nose side-shadow, cheek hollows and the eye-
       // socket depth into the drawing.
-      inten -= 0.25 * Math.pow(1 - d, 3);
+      inten -= 0.30 * Math.pow(1 - d, 3);
       // SSAO approximation: deep creases (eye sockets, nose sides, nasolabial)
       // have grazing angles (low nz) AND face away from key light.
       // This darkens concave regions beyond what direct lighting does.
-      inten -= 0.18 * Math.pow(1 - d, 2) * Math.pow(1 - f, 1.5);
+      inten -= 0.24 * Math.pow(1 - d, 2) * Math.pow(1 - f, 1.5);
       // S-curve contrast remap: compress mids downward, keep highlights.
       inten = inten * inten * (3 - 2 * inten) * 0.92 + inten * 0.08;
 
