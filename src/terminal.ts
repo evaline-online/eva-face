@@ -1,49 +1,43 @@
 /**
- * terminal.ts — Terminal renderer: ANSI output + raw mouse input.
- * Run with: npx tsx src/terminal.ts
+ * terminal.ts — High-Fidelity 3D Matrix Neural Face for Linux Console / SSH.
  *
- * Renders the face using capability-based output:
- *   - Truecolor terminal: Unicode block elements (░▒▓█) + 24-bit RGB → 3D photo
- *   - 256-color terminal:  same blocks but 256-color greyscale palette
- *   - Mono terminal:      same blocks, no color → crisp face on any terminal
- *
- * Override with env: FACE_MODE=color|grey|mono
+ * Direct triangle rasterization of Pinscreen Generic Head model (10,822 vertices, 21,510 triangles).
+ * Features:
+ *   - Mathematical dead-centering at (0, 0.18, 0)
+ *   - 3D mouse drag rotation with elastic spring return (springReturn physics)
+ *   - Continuous cursor gaze tracking & organic breathing physics
+ *   - Multi-persona switcher: [1] Eva, [2] Adam, [3] Neo, [4] Rain
+ *   - Dual visual modes: [v/tab] Matrix Katakana Code Mode & Ultra-HD TrueColor Solid Mode
+ *   - Background cascading Matrix digital rain
+ *   - Dynamic real FPS & frame time measurement
+ *   - Differential ANSI screen redraw (zero flicker)
  */
-import {
-  createFaceMesh, projectAndShade, computeParams,
-  deformMesh, v3norm, v3dot, v3,
-  type Mesh, type FaceParams,
-} from './face3d.js';
-import { detectMode, ansiSet, type GlyphRamp, type RenderMode } from './capability.js';
 
-// Node globals `process`, `stdout`, `stdin` are available globally in ESM.
-
-// ─── Terminal Setup ────────────────────────────────────────────
+import { HEAD_POS, HEAD_NRM, HEAD_TRI, HEAD_N, HEAD_TRI_COUNT } from './headmodel.js';
+import { detectMode, ansiSet, type RenderMode } from './capability.js';
 
 const stdout = process.stdout;
 const stdin = process.stdin;
 
 function getTermSize(): [number, number] {
-  const cols = stdout.columns || 80;
-  const rows = stdout.rows || 24;
+  const cols = stdout.columns || 90;
+  const rows = stdout.rows || 32;
   return [cols, rows];
 }
 
 function hideCursor() { stdout.write('\x1b[?25l'); }
 function showCursor() { stdout.write('\x1b[?25h'); }
 function clearScreen() { stdout.write('\x1b[2J\x1b[H'); }
-function moveTo(x: number, y: number) { stdout.write(`\x1b[${y + 1};${x + 1}H`); }
 
-// Raw mode for mouse input
 function enableRawMode() {
   if (stdin.isTTY) {
     stdin.setRawMode(true);
     stdin.resume();
     stdin.setEncoding('utf8');
   }
-  // Enable SGR extended mouse tracking
-  stdout.write('\x1b[?1003h'); // Any mouse tracking
-  stdout.write('\x1b[?1006h'); // SGR extended mode
+  // Enable SGR extended mouse tracking (motion + clicks)
+  stdout.write('\x1b[?1003h');
+  stdout.write('\x1b[?1006h');
 }
 
 function disableRawMode() {
@@ -55,55 +49,60 @@ function disableRawMode() {
   showCursor();
 }
 
-// ─── Persona & Color Themes ────────────────────────────────────
+// ─── Personas & Palette ────────────────────────────────────────
 
 type TermPersona = 'eva' | 'adam' | 'neo' | 'rain';
 let currentPersona: TermPersona = 'eva';
 
-const PERSONA_NAMES: Record<TermPersona, string> = {
-  eva: 'EVA (MATRIX GREEN)',
-  adam: 'ADAM (CYBER AMBER)',
-  neo: 'NEO (ELECTRA CYAN)',
-  rain: 'RAIN (EMERALD)',
-};
-
-function personaColor(r: number, g: number, b: number, persona: TermPersona): [number, number, number] {
-  const intensity = Math.max(r, Math.max(g, b)) / 255;
-  if (intensity <= 0.05) return [0, 0, 0];
-
-  switch (persona) {
-    case 'eva':
-      // Matrix Phosphor Green
-      return [
-        Math.floor(intensity * 35),
-        Math.floor(intensity * 255),
-        Math.floor(intensity * 95),
-      ];
-    case 'adam':
-      // Cyber Amber Gold
-      return [
-        Math.floor(intensity * 255),
-        Math.floor(intensity * 175),
-        Math.floor(intensity * 20),
-      ];
-    case 'neo':
-      // Electric Cyan
-      return [
-        Math.floor(intensity * 20),
-        Math.floor(intensity * 235),
-        Math.floor(intensity * 255),
-      ];
-    case 'rain':
-      // Deep Emerald Rain
-      return [
-        Math.floor(intensity * 25),
-        Math.floor(intensity * 255),
-        Math.floor(intensity * 60),
-      ];
-  }
+interface PersonaPalette {
+  name: string;
+  primary: [number, number, number];
+  highlight: [number, number, number];
+  dark: [number, number, number];
+  rain: [number, number, number];
 }
 
-// ─── Mouse & Spring Physics State ──────────────────────────────
+const PALETTES: Record<TermPersona, PersonaPalette> = {
+  eva: {
+    name: 'EVA (MATRIX PHOSPHOR)',
+    primary: [0, 255, 102],
+    highlight: [255, 255, 255],
+    dark: [0, 42, 12],
+    rain: [0, 230, 80],
+  },
+  adam: {
+    name: 'ADAM (CYBER AMBER)',
+    primary: [255, 180, 0],
+    highlight: [255, 245, 220],
+    dark: [45, 20, 2],
+    rain: [255, 160, 10],
+  },
+  neo: {
+    name: 'NEO (ELECTRA CYAN)',
+    primary: [0, 240, 255],
+    highlight: [255, 255, 255],
+    dark: [0, 25, 50],
+    rain: [0, 210, 255],
+  },
+  rain: {
+    name: 'RAIN (PURE MATRIX CODE)',
+    primary: [16, 255, 64],
+    highlight: [230, 255, 235],
+    dark: [0, 30, 6],
+    rain: [50, 255, 120],
+  },
+};
+
+// ─── Render Modes ──────────────────────────────────────────────
+
+type VisualMode = 'matrix' | 'solid';
+let visualMode: VisualMode = 'matrix'; // default Matrix Code
+
+// Strictly single-width (wcwidth=1) Matrix Katakana & code glyph ramp
+// Prevents terminal column misalignments caused by fullwidth CJK characters!
+const MATRIX_RAMP = '  .:-=+10AZXﾊﾐﾋｳｼﾅﾓﾆｻﾜﾂｵ#%@';
+
+// ─── Interactive State & Spring Physics ─────────────────────────
 
 let mouseX = 0;
 let mouseY = 0;
@@ -114,20 +113,72 @@ let rotY = 0;
 let dragging = false;
 let lastMX = 0;
 let lastMY = 0;
-let autoRotY = 0;
+let buttonDown = false;
 let hasInteracted = false;
-let termW = 80;
-let termH = 24;
+let termW = 90;
+let termH = 32;
 
-// ─── Parse Mouse & Keyboard Input ──────────────────────────────
+// Natural blinking state
+let blinkAmount = 0;
+let lastBlinkTime = 0;
+let nextBlinkInterval = 2800;
+
+// ─── Matrix Rain System ────────────────────────────────────────
+
+interface RainColumn {
+  y: number;
+  speed: number;
+  chars: string[];
+}
+
+let rainColumns: RainColumn[] = [];
+const RAIN_GLYPHS = '日ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵ0123456789+*=AZX';
+
+function initRain(cols: number) {
+  rainColumns = [];
+  for (let i = 0; i < cols; i++) {
+    const chars: string[] = [];
+    for (let c = 0; c < 20; c++) {
+      chars.push(RAIN_GLYPHS[Math.floor(Math.random() * RAIN_GLYPHS.length)]);
+    }
+    rainColumns.push({
+      y: Math.random() * 50 - 40,
+      speed: 0.2 + Math.random() * 0.7,
+      chars,
+    });
+  }
+}
+
+function updateRain(dt: number, cols: number, rows: number) {
+  while (rainColumns.length < cols) {
+    const chars: string[] = [];
+    for (let c = 0; c < 20; c++) {
+      chars.push(RAIN_GLYPHS[Math.floor(Math.random() * RAIN_GLYPHS.length)]);
+    }
+    rainColumns.push({ y: Math.random() * rows, speed: 0.2 + Math.random() * 0.7, chars });
+  }
+
+  for (let i = 0; i < cols; i++) {
+    const col = rainColumns[i];
+    col.y += col.speed * dt * 18;
+    if (col.y > rows + 15) {
+      col.y = -Math.random() * 10 - 2;
+      col.speed = 0.2 + Math.random() * 0.7;
+      if (Math.random() < 0.2) {
+        col.chars[0] = RAIN_GLYPHS[Math.floor(Math.random() * RAIN_GLYPHS.length)];
+      }
+    }
+  }
+}
+
+// ─── Input Parsing ─────────────────────────────────────────────
 
 let inputBuffer = '';
-let buttonDown = false; // true while left button is held
 
 function handleInput(data: Buffer) {
   const str = data.toString('utf8');
 
-  // Handle keyboard shortcuts (single keystroke)
+  // Keystrokes
   if (str === '\u0003' || str.toLowerCase() === 'q') {
     disableRawMode();
     clearScreen();
@@ -137,24 +188,28 @@ function handleInput(data: Buffer) {
   else if (str === '2') { currentPersona = 'adam'; }
   else if (str === '3') { currentPersona = 'neo'; }
   else if (str === '4') { currentPersona = 'rain'; }
+  else if (str.toLowerCase() === 'v' || str === '\t') {
+    visualMode = visualMode === 'matrix' ? 'solid' : 'matrix';
+    prevCells = null;
+    clearScreen();
+  }
   else if (str.toLowerCase() === 'r') {
     rotX = 0; rotY = 0; dragRotX = 0; dragRotY = 0; mouseX = 0; mouseY = 0;
   }
 
   inputBuffer += str;
 
-  // Parse SGR mouse: ESC [ < Cb ; Cx ; Cy M/m
+  // SGR Mouse Protocol: ESC [ < Cb ; Cx ; Cy M/m
   const mouseRegex = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
   let match;
   while ((match = mouseRegex.exec(inputBuffer)) !== null) {
     const rawBtn = parseInt(match[1]);
-    const x = parseInt(match[2]) - 1; // 0-based
+    const x = parseInt(match[2]) - 1;
     const y = parseInt(match[3]) - 1;
     const isRelease = match[4] === 'm';
-    const btn = rawBtn >= 32 ? rawBtn - 32 : rawBtn; // motion-with-button mask
+    const btn = rawBtn >= 32 ? rawBtn - 32 : rawBtn;
 
     if (isRelease || rawBtn % 32 >= 3) {
-      // Button released -> Spring return initiates automatically
       if (btn === 0) {
         dragging = false;
         buttonDown = false;
@@ -169,9 +224,8 @@ function handleInput(data: Buffer) {
         dragging = false;
         buttonDown = false;
       } else if (dragging) {
-        // Drag motion while held -> accumulate 3D rotation
-        const dx = (x - lastMX) / termW * 2.8;
-        const dy = (y - lastMY) / termH * 2.8;
+        const dx = ((x - lastMX) / termW) * 2.8;
+        const dy = ((y - lastMY) / termH) * 2.8;
         dragRotY += dx;
         dragRotX += dy;
         lastMX = x;
@@ -186,12 +240,9 @@ function handleInput(data: Buffer) {
     inputBuffer = inputBuffer.substring(match.index + match[0].length);
   }
 
-  // Check for partial escape sequence at end
   if (inputBuffer.startsWith('\x1b') && !inputBuffer.match(/\x1b\[</)) {
     if (inputBuffer.length > 1) inputBuffer = '';
   }
-
-  // Clear stale buffer
   if (inputBuffer.length > 50) {
     inputBuffer = inputBuffer.slice(-20);
   }
@@ -205,154 +256,72 @@ stdin.on('data', (data: Buffer) => {
 
 process.on('resize', () => {
   [termW, termH] = getTermSize();
-  initRain(HALF ? termH * 2 : termH);
+  initRain(termW);
   prevCells = null;
   clearScreen();
 });
 
-// ─── Color Helpers ─────────────────────────────────────────────
+// ─── High-Performance 3D Triangle Rasterizer ───────────────────
 
-const RESET = '\x1b[0m';
+// Reusable vertex projection buffers
+const sX = new Float32Array(HEAD_N);
+const sY = new Float32Array(HEAD_N);
+const vZ = new Float32Array(HEAD_N);
+const nX = new Float32Array(HEAD_N);
+const nY = new Float32Array(HEAD_N);
+const nZ = new Float32Array(HEAD_N);
 
-// Foreground per render mode (color=24bit, grey=256-palette, mono=SGR attr).
-function ansiFg(r: number, g: number, b: number): string {
-  return ansiSet(r, g, b, RENDER_MODE);
-}
-// Background per render mode (mono has no background palette → '').
-function ansiBg(r: number, g: number, b: number): string {
-  if (RENDER_MODE === 'color') return `\x1b[48;2;${r};${g};${b}m`;
-  if (RENDER_MODE === 'grey') return `\x1b[48;5;${232 + Math.round((r / 255) * 23)}m`;
-  return '';
-}
+// Frame buffers
+let maxGridSize = 300 * 200;
+let depthBuf = new Float32Array(maxGridSize);
+let normBufX = new Float32Array(maxGridSize);
+let normBufY = new Float32Array(maxGridSize);
+let normBufZ = new Float32Array(maxGridSize);
 
-// ─── Render mode (capability-based) ────────────────────────────
-//
-// Detects terminal colour depth and picks:
-//   - mode = 'color' → 24-bit RGB, blocks + 3D shading
-//   - mode = 'grey'  → 256-colour palette, blocks + 2D shading
-//   - mode = 'mono'  → no colour, blocks only (works on dumb terminals)
-//
-// Override: FACE_MODE=color|grey|mono
-
-const cap = detectMode();
-const RENDER_MODE = cap.mode;
-const RAMP_BLOCK = ' ░▒▓█';
-
-// ─── Render mode (capability-based) ────────────────────────────
-
-const BINARY_CHARS = '01';
-const SHADE_CHARS = ' .\'`:-=+*#%@';
-const SHADE_LEN = SHADE_CHARS.length;
-
-function getChar(intensity: number, useBinary: boolean): string {
-  if (useBinary && intensity > 0.75) {
-    return BINARY_CHARS[1]; // '1'
-  }
-  if (useBinary && intensity > 0.4) {
-    return BINARY_CHARS[0]; // '0'
-  }
-  const idx = Math.floor(intensity * (SHADE_LEN - 1));
-  return SHADE_CHARS[Math.max(0, Math.min(SHADE_LEN - 1, idx))];
-}
-
-// ─── Rain Background ───────────────────────────────────────────
-
-interface RainDrop {
-  x: number;
-  y: number;
-  speed: number;
-  char: string;
-  bright: boolean;
-}
-
-let rain: RainDrop[] = [];
-
-const RAIN_CHARS = '日ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵ0123456789+*=';
-
-// Rain lives on the VIRTUAL-row grid (termH*2 in half-block mode). The
-// `rows` param is the virtual height; drop y-coordinates are virtual rows.
-function initRain(rows: number) {
-  rain = [];
-  for (let i = 0; i < termW + 10; i++) {
-    rain.push({
-      x: i,
-      y: Math.random() * rows * 2 - rows,
-      speed: 0.15 + Math.random() * 0.6,
-      char: RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)],
-      bright: Math.random() < 0.10,
-    });
+function ensureBuffers(size: number) {
+  if (size > maxGridSize) {
+    maxGridSize = size + 5000;
+    depthBuf = new Float32Array(maxGridSize);
+    normBufX = new Float32Array(maxGridSize);
+    normBufY = new Float32Array(maxGridSize);
+    normBufZ = new Float32Array(maxGridSize);
   }
 }
 
-function updateRain(dt: number, rows: number) {
-  for (const drop of rain) {
-    drop.y += drop.speed * dt * 10;
-    if (drop.y > rows + 2) {
-      drop.y = -1 - Math.random() * 8;
-      drop.x = Math.floor(Math.random() * termW);
-      drop.char = RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)];
-      drop.speed = 0.15 + Math.random() * 0.6;
-      drop.bright = Math.random() < 0.10;
-    }
-  }
-  // Adjust rain array size if terminal resized
-  while (rain.length < termW + 10) {
-    rain.push({
-      x: rain.length,
-      y: Math.random() * rows * 2,
-      speed: 0.15 + Math.random() * 0.6,
-      char: Math.random() > 0.5 ? '0' : '1',
-      bright: Math.random() < 0.08,
-    });
-  }
-}
+// Directional Lights
+const KEY_DIR = [0.42, 0.52, 0.74];
+const keyLen = Math.hypot(...KEY_DIR);
+KEY_DIR[0] /= keyLen; KEY_DIR[1] /= keyLen; KEY_DIR[2] /= keyLen;
 
-// ─── Main Loop ─────────────────────────────────────────────────
+const FILL_DIR = [-0.50, 0.20, 0.45];
+const fillLen = Math.hypot(...FILL_DIR);
+FILL_DIR[0] /= fillLen; FILL_DIR[1] /= fillLen; FILL_DIR[2] /= fillLen;
 
-const mesh = createFaceMesh();
-[termW, termH] = getTermSize();
-
-// Half-block mode: the render grid is termH*2 virtual rows tall. Must match
-// the HALF computation in render() (mono terminals have no bg palette).
-const HALF = RENDER_MODE !== 'mono' && process.env.FACE_HALF !== '0';
-const GH = HALF ? termH * 2 : termH;
-initRain(GH);
-
-// Previous frame's serialized cells ('' = first frame → full repaint).
-// Reset to null on resize so the diff pass emits a full frame.
+// Previous frame cell cache for differential redraw
 let prevCells: string[] | null = null;
 
-hideCursor();
-enableRawMode();
-clearScreen();
-
+// Performance timing
 let prevTime = performance.now();
-let frameCount = 0;
-// Perf metrics (FACE-10): frame pacing (dt EMA) + CPU render time (CPU EMA).
-// `dtMsAvg` = actual frames/sec the loop sustains; `cpuMsAvg` = how long one
-// frame takes to project+rasterize (the adaptation metric for the terminal).
 let dtMsAvg = 33;
 let cpuMsAvg = 10;
-let cpuStart = 0;
 
-function render() {
+function renderFrame() {
   const now = performance.now();
   const dt = Math.min((now - prevTime) / 1000, 0.1);
   prevTime = now;
   const time = now / 1000;
-  frameCount++;
-  cpuStart = performance.now();
+  const cpuStart = performance.now();
 
   const [w, h] = getTermSize();
   if (w !== termW || h !== termH) {
     termW = w;
     termH = h;
-    initRain(HALF ? termH * 2 : termH);
+    initRain(termW);
     prevCells = null;
     clearScreen();
   }
 
-  // Smooth gaze and rotation tracking with elastic spring return
+  // 1. Elastic Spring Return to Center
   if (!dragging) {
     dragRotX *= 0.88;
     dragRotY *= 0.88;
@@ -360,123 +329,320 @@ function render() {
     if (Math.abs(dragRotY) < 0.0001) dragRotY = 0;
   }
 
-  const targetRX = (mouseY * 0.25) + dragRotX;
-  let targetRY = (mouseX * 0.40) + dragRotY;
+  // Gaze tracking + breathing
+  const hoverX = -mouseY * 0.25;
+  const hoverY = mouseX * 0.40;
+  const targetRotX = hoverX + dragRotX;
+  let targetRotY = hoverY + dragRotY;
 
   if (!dragging && hasInteracted) {
-    autoRotY += dt * 0.3;
-    targetRY += Math.sin(autoRotY) * 0.10;
+    targetRotY += Math.sin(time * 0.8) * 0.04;
   }
 
-  const lerpSpeed = dragging ? 8 : 4;
-  rotX += (targetRX - rotX) * Math.min(1, dt * lerpSpeed);
-  rotY += (targetRY - rotY) * Math.min(1, dt * lerpSpeed);
+  const lerpSpeed = dragging ? 10 : 5;
+  rotX += (targetRotX - rotX) * Math.min(1, dt * lerpSpeed);
+  rotY += (targetRotY - rotY) * Math.min(1, dt * lerpSpeed);
 
-  // Face params
-  const params = computeParams(time, mouseX, mouseY, dragging);
+  // Blinking physics
+  if (now - lastBlinkTime > nextBlinkInterval) {
+    blinkAmount = 1.0;
+    lastBlinkTime = now;
+    nextBlinkInterval = 2500 + Math.random() * 3200;
+  }
+  if (blinkAmount > 0) {
+    blinkAmount -= dt * 7.5;
+    if (blinkAmount < 0) blinkAmount = 0;
+  }
 
-  // Deform
-  deformMesh(mesh, params);
+  // Grid dimensions
+  const isSolid = visualMode === 'solid';
+  const gridW = termW;
+  const gridH = isSolid ? termH * 2 : termH;
+  const cellAspect = isSolid ? 1.0 : 0.50; // ratio of width to height per sample cell
 
-  // Half-block mode (module-level HALF): each terminal cell is split into two
-  // virtual rows rendered as '▀' with fg=upper color, bg=lower color → 2×
-  // vertical detail. Virtual cells are square (cellAspect 1.0 instead of 0.5).
-  // Disable with FACE_HALF=0. Mono terminals skip it (no bg palette).
-  const GH = HALF ? termH * 2 : termH;
-  const aspect = HALF ? 1.0 : 0.5;
+  ensureBuffers(gridW * gridH);
+  depthBuf.fill(-999, 0, gridW * gridH);
 
-  // Project (cellAspect ≈ 0.5 for terminal cells: ~2x taller than wide)
-  // Eyes (pupils + irises) track the cursor via gaze, same as the browser.
-  const result = projectAndShade(mesh, rotX, rotY, 0, termW, GH, aspect,
-    { gx: mouseX, gy: mouseY }, RENDER_MODE, (process.env.FACE_RAMP as GlyphRamp) || 'matrix');
+  // 2. Camera & Scaling (Dead-Center at 0, 0.18, 0)
+  const headScale = Math.min(gridW * 0.27, gridH * 0.62);
+  const sx = (headScale / cellAspect) * 1.05;
+  const sy = headScale;
+  const camZ = 2.45;
 
-  // Update rain (lives on the same virtual-row grid)
-  updateRain(dt, GH);
+  const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
 
-  // ── Build the current frame as one string per cell ─────────────
-  // Cells carry their full escape sequence; unchanged cells are plain
-  // strings that the diff pass below simply skips.
-  const N = termW * termH;
-  const cur: string[] = new Array(N);
+  // 3. Transform Vertices
+  const breathY = Math.sin(time * 1.8) * 0.008;
 
-  for (let j = 0; j < termH; j++) {
-    const rT = result.cells[HALF ? j * 2 : j];
-    const rB = HALF ? result.cells[j * 2 + 1] : null;
+  for (let i = 0; i < HEAD_N; i++) {
+    let x = -HEAD_POS[i * 3];
+    let y = HEAD_POS[i * 3 + 1];
+    let z = -HEAD_POS[i * 3 + 2];
+    let nx = -HEAD_NRM[i * 3];
+    let ny = HEAD_NRM[i * 3 + 1];
+    let nz = -HEAD_NRM[i * 3 + 2];
 
-    for (let i = 0; i < termW; i++) {
-      const t = rT?.[i];
-      const b = rB?.[i];
-      const tFace = !!t && t.ch !== ' ' && t.ch !== '\0';
-      const bFace = !!b && b.ch !== ' ' && b.ch !== '\0';
-      const idx = j * termW + i;
+    // Blink deformation on upper eyelids
+    if (blinkAmount > 0 && y > 0.30 && y < 0.38 && z > 0.32) {
+      const eyeDist = Math.hypot(Math.abs(x) - 0.137, y - 0.336);
+      if (eyeDist < 0.065) {
+        y -= blinkAmount * (1 - eyeDist / 0.065) * 0.024;
+      }
+    }
 
-      if (tFace || bFace) {
-        // Face cell: persona-tinted color
-        const f = tFace ? t! : b!;
-        const bg = tFace && bFace ? b! : null;
-        const [fr, fg, fb] = personaColor(f.r, f.g, f.b, currentPersona);
-        const [bgr, bgg, bgb] = bg ? personaColor(bg.r, bg.g, bg.b, currentPersona) : [0, 0, 0];
-        cur[idx] = ansiFg(fr, fg, fb) + (bg ? ansiBg(bgr, bgg, bgb) : '') + f.ch;
-      } else {
-        // Background: matrix rain, resolved on the virtual-row grid.
-        let topRain = 0;
-        let botRain = 0;
-        const rows = HALF ? [j * 2, j * 2 + 1] : [j];
-        for (const j2 of rows) {
-          const drop = rain[i % rain.length];
-          if (Math.floor(drop.y) === j2) {
-            if (j2 % 2 === 0 || !HALF) topRain = drop.bright ? 2 : 1;
-            else botRain = drop.bright ? 2 : 1;
-          }
-          if (!topRain && !botRain && (i + j2 * 3) % 13 === 0 &&
-              Math.sin(time + i * 0.7 + j2 * 0.4) > 0.96) {
-            if (j2 % 2 === 0 || !HALF) topRain = 1;
-            else botRain = 1;
-          }
-        }
-        if (topRain && botRain) {
-          cur[idx] = ansiFg(0, topRain === 2 ? 255 : 80, 0) + '█';
-        } else if (topRain) {
-          cur[idx] = ansiFg(0, topRain === 2 ? 255 : 80, 0) + '▀';
-        } else if (botRain) {
-          cur[idx] = ansiFg(0, botRain === 2 ? 255 : 80, 0) + '▄';
-        } else {
-          cur[idx] = ' ';
+    // Centered rotation around (0, 0.18, 0)
+    y -= 0.18;
+    // Yaw (Y)
+    const x1 = x * cosY + z * sinY;
+    const z1 = -x * sinY + z * cosY;
+    const nx1 = nx * cosY + nz * sinY;
+    const nz1 = -nx * sinY + nz * cosY;
+    // Pitch (X)
+    const y2 = y * cosX - z1 * sinX;
+    const z2 = y * sinX + z1 * cosX;
+    const ny2 = ny * cosX - nz1 * sinX;
+    const nz2 = ny * sinX + nz1 * cosX;
+
+    const finalY = y2 + 0.18 + breathY;
+    vZ[i] = z2;
+    nX[i] = nx1;
+    nY[i] = ny2;
+    nZ[i] = nz2;
+
+    const dist = camZ - z2;
+    const pers = camZ / Math.max(0.1, dist);
+    sX[i] = gridW / 2 + x1 * sx * pers;
+    sY[i] = gridH / 2 - (finalY - 0.18) * sy * pers;
+  }
+
+  // 4. Triangle Rasterization with Z-Buffer
+  for (let t = 0; t < HEAD_TRI_COUNT; t++) {
+    const i0 = HEAD_TRI[t * 3], i1 = HEAD_TRI[t * 3 + 1], i2 = HEAD_TRI[t * 3 + 2];
+    const x0 = sX[i0], y0 = sY[i0], z0 = vZ[i0];
+    const x1 = sX[i1], y1 = sY[i1], z1 = vZ[i1];
+    const x2 = sX[i2], y2 = sY[i2], z2 = vZ[i2];
+
+    // Backface culling in screen space
+    const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    if (area >= 0) continue;
+
+    const minI = Math.max(0, Math.floor(Math.min(x0, x1, x2)));
+    const maxI = Math.min(gridW - 1, Math.ceil(Math.max(x0, x1, x2)));
+    const minJ = Math.max(0, Math.floor(Math.min(y0, y1, y2)));
+    const maxJ = Math.min(gridH - 1, Math.ceil(Math.max(y0, y1, y2)));
+
+    const invArea = 1 / area;
+    for (let j = minJ; j <= maxJ; j++) {
+      const py = j + 0.5;
+      const rowBase = j * gridW;
+      const w0row = (x2 - x1) * (py - y1);
+      const w1row = (x0 - x2) * (py - y2);
+      const w2row = (x1 - x0) * (py - y0);
+      const dx0 = -(y2 - y1);
+      const dx1 = -(y0 - y2);
+      const dx2 = -(y1 - y0);
+
+      for (let i = minI; i <= maxI; i++) {
+        const px = i + 0.5;
+        const w0 = w0row + dx0 * (px - x1);
+        const w1 = w1row + dx1 * (px - x2);
+        const w2 = w2row + dx2 * (px - x0);
+
+        const a0 = w0 * invArea;
+        const a1 = w1 * invArea;
+        const a2 = w2 * invArea;
+        if (a0 < -0.01 || a1 < -0.01 || a2 < -0.01) continue;
+
+        const z = a0 * z0 + a1 * z1 + a2 * z2;
+        const idx = rowBase + i;
+        if (z > depthBuf[idx]) {
+          depthBuf[idx] = z;
+          normBufX[idx] = a0 * nX[i0] + a1 * nX[i1] + a2 * nX[i2];
+          normBufY[idx] = a0 * nY[i0] + a1 * nY[i1] + a2 * nY[i2];
+          normBufZ[idx] = a0 * nZ[i0] + a1 * nZ[i1] + a2 * nZ[i2];
         }
       }
     }
   }
 
-  // Title (row 0) and controls hint (last row), as plain cell strings.
+  // 5. Update Matrix Rain
+  updateRain(dt, termW, termH);
+
+  // 6. Color & Glyph Resolution
+  const palette = PALETTES[currentPersona];
+  const totalCells = termW * termH;
+  const curCells: string[] = new Array(totalCells);
+
+  if (isSolid) {
+    // ─── Mode 2: Ultra-HD TrueColor Solid Half-Blocks (▀) ───────
+    for (let j = 0; j < termH; j++) {
+      const rowT = j * 2;
+      const rowB = j * 2 + 1;
+
+      for (let i = 0; i < termW; i++) {
+        const idxT = rowT * gridW + i;
+        const idxB = rowB * gridW + i;
+        const hasT = depthBuf[idxT] > -990;
+        const hasB = depthBuf[idxB] > -990;
+        const outIdx = j * termW + i;
+
+        if (!hasT && !hasB) {
+          // Digital rain background in half-block mode
+          const rain = rainColumns[i % rainColumns.length];
+          const dropY = Math.floor(rain.y);
+          if (rowT === dropY) {
+            curCells[outIdx] = `\x1b[38;2;${palette.highlight[0]};${palette.highlight[1]};${palette.highlight[2]}m▀`;
+          } else if (rowT > dropY && rowT < dropY + 6) {
+            const decay = 1 - (rowT - dropY) / 6;
+            const r = Math.floor(palette.rain[0] * decay * 0.4);
+            const g = Math.floor(palette.rain[1] * decay * 0.4);
+            const b = Math.floor(palette.rain[2] * decay * 0.4);
+            curCells[outIdx] = `\x1b[38;2;${r};${g};${b}m▀`;
+          } else {
+            curCells[outIdx] = ' ';
+          }
+        } else {
+          // Shaded face pixels
+          let rT = 0, gT = 0, bT = 0;
+          let rB = 0, gB = 0, bB = 0;
+
+          if (hasT) {
+            let nx = normBufX[idxT], ny = normBufY[idxT], nz = normBufZ[idxT];
+            const nl = Math.hypot(nx, ny, nz) || 1;
+            nx /= nl; ny /= nl; nz /= nl;
+            const dot = Math.max(0, nx * KEY_DIR[0] + ny * KEY_DIR[1] + nz * KEY_DIR[2]);
+            const fill = Math.max(0, nx * FILL_DIR[0] + ny * FILL_DIR[1] + nz * FILL_DIR[2]);
+            const spec = Math.pow(Math.max(0, nz), 14);
+            const inten = Math.max(0, Math.min(1, 0.10 + 0.65 * dot + 0.15 * fill + 0.35 * spec));
+
+            if (inten > 0.72) {
+              const f = (inten - 0.72) / 0.28;
+              rT = Math.floor(palette.primary[0] * (1 - f) + palette.highlight[0] * f);
+              gT = Math.floor(palette.primary[1] * (1 - f) + palette.highlight[1] * f);
+              bT = Math.floor(palette.primary[2] * (1 - f) + palette.highlight[2] * f);
+            } else {
+              const f = inten / 0.72;
+              rT = Math.floor(palette.dark[0] * (1 - f) + palette.primary[0] * f);
+              gT = Math.floor(palette.dark[1] * (1 - f) + palette.primary[1] * f);
+              bT = Math.floor(palette.dark[2] * (1 - f) + palette.primary[2] * f);
+            }
+          }
+
+          if (hasB) {
+            let nx = normBufX[idxB], ny = normBufY[idxB], nz = normBufZ[idxB];
+            const nl = Math.hypot(nx, ny, nz) || 1;
+            nx /= nl; ny /= nl; nz /= nl;
+            const dot = Math.max(0, nx * KEY_DIR[0] + ny * KEY_DIR[1] + nz * KEY_DIR[2]);
+            const fill = Math.max(0, nx * FILL_DIR[0] + ny * FILL_DIR[1] + nz * FILL_DIR[2]);
+            const spec = Math.pow(Math.max(0, nz), 14);
+            const inten = Math.max(0, Math.min(1, 0.10 + 0.65 * dot + 0.15 * fill + 0.35 * spec));
+
+            if (inten > 0.72) {
+              const f = (inten - 0.72) / 0.28;
+              rB = Math.floor(palette.primary[0] * (1 - f) + palette.highlight[0] * f);
+              gB = Math.floor(palette.primary[1] * (1 - f) + palette.highlight[1] * f);
+              bB = Math.floor(palette.primary[2] * (1 - f) + palette.highlight[2] * f);
+            } else {
+              const f = inten / 0.72;
+              rB = Math.floor(palette.dark[0] * (1 - f) + palette.primary[0] * f);
+              gB = Math.floor(palette.dark[1] * (1 - f) + palette.primary[1] * f);
+              bB = Math.floor(palette.dark[2] * (1 - f) + palette.primary[2] * f);
+            }
+          }
+
+          if (hasT && !hasB) {
+            curCells[outIdx] = `\x1b[38;2;${rT};${gT};${bT}m▀`;
+          } else if (!hasT && hasB) {
+            curCells[outIdx] = `\x1b[38;2;${rB};${gB};${bB}m▄`;
+          } else {
+            curCells[outIdx] = `\x1b[38;2;${rT};${gT};${bT};48;2;${rB};${gB};${bB}m▀`;
+          }
+        }
+      }
+    }
+  } else {
+    // ─── Mode 1: True Matrix Katakana & Code Grid ──────────────
+    for (let j = 0; j < termH; j++) {
+      for (let i = 0; i < termW; i++) {
+        const idx = j * gridW + i;
+        const outIdx = j * termW + i;
+        const hasSurface = depthBuf[idx] > -990;
+
+        if (hasSurface) {
+          let nx = normBufX[idx], ny = normBufY[idx], nz = normBufZ[idx];
+          const nl = Math.hypot(nx, ny, nz) || 1;
+          nx /= nl; ny /= nl; nz /= nl;
+
+          const dot = Math.max(0, nx * KEY_DIR[0] + ny * KEY_DIR[1] + nz * KEY_DIR[2]);
+          const fill = Math.max(0, nx * FILL_DIR[0] + ny * FILL_DIR[1] + nz * FILL_DIR[2]);
+          const spec = Math.pow(Math.max(0, nz), 14);
+          const inten = Math.max(0, Math.min(1, 0.08 + 0.70 * dot + 0.18 * fill + 0.32 * spec));
+
+          // Character index
+          const charIdx = Math.floor(inten * (MATRIX_RAMP.length - 1));
+          const char = MATRIX_RAMP[charIdx];
+
+          // 24-bit TrueColor
+          let r = 0, g = 0, b = 0;
+          if (inten > 0.75) {
+            const f = (inten - 0.75) / 0.25;
+            r = Math.floor(palette.primary[0] * (1 - f) + palette.highlight[0] * f);
+            g = Math.floor(palette.primary[1] * (1 - f) + palette.highlight[1] * f);
+            b = Math.floor(palette.primary[2] * (1 - f) + palette.highlight[2] * f);
+          } else {
+            const f = inten / 0.75;
+            r = Math.floor(palette.dark[0] * (1 - f) + palette.primary[0] * f);
+            g = Math.floor(palette.dark[1] * (1 - f) + palette.primary[1] * f);
+            b = Math.floor(palette.dark[2] * (1 - f) + palette.primary[2] * f);
+          }
+
+          curCells[outIdx] = `\x1b[38;2;${r};${g};${b}m${char}`;
+        } else {
+          // Digital rain background
+          const rain = rainColumns[i % rainColumns.length];
+          const dropY = Math.floor(rain.y);
+          if (j === dropY) {
+            const glyph = rain.chars[0];
+            curCells[outIdx] = `\x1b[38;2;${palette.highlight[0]};${palette.highlight[1]};${palette.highlight[2]}m${glyph}`;
+          } else if (j > dropY && j < dropY + 7) {
+            const decay = 1 - (j - dropY) / 7;
+            const r = Math.floor(palette.rain[0] * decay * 0.45);
+            const g = Math.floor(palette.rain[1] * decay * 0.45);
+            const b = Math.floor(palette.rain[2] * decay * 0.45);
+            const glyph = rain.chars[(j - dropY) % rain.chars.length];
+            curCells[outIdx] = `\x1b[38;2;${r};${g};${b}m${glyph}`;
+          } else {
+            curCells[outIdx] = ' ';
+          }
+        }
+      }
+    }
+  }
+
+  // 7. Title Bar & Controls Hint
   const cpuMs = performance.now() - cpuStart;
   dtMsAvg = dtMsAvg * 0.9 + (dt * 1000) * 0.1;
   cpuMsAvg = cpuMsAvg * 0.9 + cpuMs * 0.1;
   const fps = 1000 / Math.max(dtMsAvg, 0.01);
-  const pName = PERSONA_NAMES[currentPersona];
-  const title = ` 🟢 ${pName} · ${RENDER_MODE.toUpperCase()} · ${fps.toFixed(0)}fps ${cpuMsAvg.toFixed(1)}ms `;
+
+  const modeTag = visualMode === 'matrix' ? 'MATRIX CODE' : 'HD SOLID';
+  const title = ` 🟢 ${palette.name} · ${modeTag} · ${fps.toFixed(0)} FPS (${cpuMsAvg.toFixed(1)}ms) `;
   const titleX = Math.max(0, Math.floor((termW - title.length) / 2));
   for (let k = 0; k < title.length && titleX + k < termW; k++) {
-    cur[titleX + k] = ansiFg(0, 255, 0) + title[k];
+    curCells[titleX + k] = `\x1b[38;2;${palette.primary[0]};${palette.primary[1]};${palette.primary[2]};1m${title[k]}`;
   }
+
   if (termH > 1) {
-    const hint = ' Keys: [1] Eva [2] Adam [3] Neo [4] Rain | Mouse: Gaze | Drag: Rotate | [r] Center | [q] Quit ';
+    const hint = ' Keys: [1..4] Personas | [v/tab] Matrix/HD Mode | Mouse: Gaze & Drag-Rotate | [r] Center | [q] Quit ';
     const hintX = Math.max(0, Math.floor((termW - hint.length) / 2));
     const base = (termH - 1) * termW;
     for (let k = 0; k < hint.length && hintX + k < termW; k++) {
-      cur[base + hintX + k] = ansiFg(0, 150, 50) + hint[k];
+      curCells[base + hintX + k] = `\x1b[38;2;0;160;70m${hint[k]}`;
     }
   }
 
-  // Header note: log the mode to stderr (visible when run manually)
-  if (frameCount === 1) {
-    console.error(`[terminal] mode=${RENDER_MODE}  colors=${cap.colors}  half=${HALF}  (override: FACE_MODE=color|grey|mono  FACE_HALF=0)`);
-  }
-
-  // ── Differential output ────────────────────────────────────────
-  // Emit ONLY the cells that changed since the previous frame. A full-screen
-  // rewrite with per-cell escapes (~20 bytes/cell × ~10k cells × 30fps)
-  // saturates the pty — the terminal can't paint that fast, so output backs
-  // up and floods the screen. Cursor jumps are emitted per contiguous run.
+  // 8. Differential Redraw Output
   if (prevCells === null) {
     clearScreen();
   }
@@ -489,13 +655,13 @@ function render() {
   for (let j = 0; j < termH; j++) {
     for (let i = 0; i < termW; i++) {
       const idx = j * termW + i;
-      const c = cur[idx];
+      const c = curCells[idx];
       if (prevCells !== null && prevCells[idx] === c) continue;
 
       if (runLen > 0 && idx === lastIdx + 1) {
         runLen++;
       } else {
-        if (runLen > 0) out += cur.slice(runStart, runStart + runLen).join('');
+        if (runLen > 0) out += curCells.slice(runStart, runStart + runLen).join('');
         out += `\x1b[${j + 1};${i + 1}H`;
         runStart = idx;
         runLen = 1;
@@ -503,15 +669,16 @@ function render() {
       lastIdx = idx;
     }
   }
-  if (runLen > 0) out += cur.slice(runStart, runStart + runLen).join('');
+  if (runLen > 0) out += curCells.slice(runStart, runStart + runLen).join('');
 
-  if (out) stdout.write(out + RESET);
-  prevCells = cur;
+  if (out) stdout.write(out + '\x1b[0m');
+  prevCells = curCells;
 
-  setTimeout(render, 33); // ~30fps
+  // Schedule next frame (~30 FPS target)
+  setTimeout(renderFrame, 28);
 }
 
-// ─── Cleanup on exit ───────────────────────────────────────────
+// ─── Cleanup ───────────────────────────────────────────────────
 
 process.on('SIGINT', () => {
   disableRawMode();
@@ -529,5 +696,10 @@ process.on('exit', () => {
   disableRawMode();
 });
 
-// Start
-render();
+// Startup
+[termW, termH] = getTermSize();
+initRain(termW);
+hideCursor();
+enableRawMode();
+clearScreen();
+renderFrame();
