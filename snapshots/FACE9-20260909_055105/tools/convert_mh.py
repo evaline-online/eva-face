@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""Convert MakeHuman CC0 base.obj into 4 head variants + our JS headmodel format.
+
+Uses pyfqmr (quadric mesh decimation) for proper topology-preserving
+reduction. Target: 1500 verts per head (was 7829 raw) so 4 variants fit in
+~200KB of JS each.
+"""
+import os
+import sys
+import numpy as np
+import pyfqmr
+
+SRC = '/home/evabot/Desktop/eva-face/assets/makehuman_base.obj'
+DST_DIR = '/home/evabot/Desktop/eva-face/src'
+TARGET_VERTS = 1500
+
+def load_obj(path):
+    """Parse OBJ to verts (N,3) and faces (T,3) with 0-based indices."""
+    verts, faces = [], []
+    with open(path) as f:
+        for line in f:
+            if line.startswith('v '):
+                p = line.split()
+                verts.append([float(p[1]), float(p[2]), float(p[3])])
+            elif line.startswith('f '):
+                ids = [int(x.split('/')[0]) - 1 for x in line.split()[1:]]
+                if len(ids) == 3:
+                    faces.append(ids)
+                elif len(ids) == 4:
+                    faces.append([ids[0], ids[1], ids[2]])
+                    faces.append([ids[0], ids[2], ids[3]])
+    return np.array(verts, dtype=np.float32), np.array(faces, dtype=np.int32)
+
+def crop_head(v, f, top_frac=0.0, bot_frac=0.71):
+    """Keep only the top portion of the body (head + neck).
+
+    MH body default pose is Y-up, head at the top. bot_frac is the fraction
+    of body height to KEEP FROM THE BOTTOM (i.e. 0.71 keeps 71% of the bottom,
+    which is everything EXCEPT the top 29% head region — we want the inverse:
+    set bot_frac high to crop from the top down to the head). The default here
+    keeps the top 29% of body height.
+    """
+    ymin, ymax = v[:,1].min(), v[:,1].max()
+    height = ymax - ymin
+    bot = ymin + bot_frac * height
+    top = ymax - top_frac * height
+    keep = (v[:,1] >= bot) & (v[:,1] <= top)
+    old_to_new = -np.ones(len(v), dtype=np.int32)
+    old_to_new[keep] = np.arange(keep.sum())
+    new_v = v[keep]
+    keep_f = keep[f].all(axis=1)
+    new_f = old_to_new[f[keep_f]]
+    valid = (new_f[:,0] >= 0) & (new_f[:,1] >= 0) & (new_f[:,2] >= 0)
+    new_f = new_f[valid]
+    return new_v, new_f
+
+def orient_and_normalize(v):
+    """Center origin, face +Z, head Y up. Scale to ~1.0 unit tall."""
+    v = v.copy()
+    # shift neck-base to y=0
+    v[:,1] -= v[:,1].min()
+    # find head extents
+    ymax = v[:,1].max()
+    ymin = v[:,1].min()
+    # center xz at 0
+    v[:,0] -= (v[:,0].max() + v[:,0].min()) / 2
+    v[:,2] -= (v[:,2].max() + v[:,2].min()) / 2
+    # face toward +Z (MH nose is at +Z)
+    # nothing to do
+    # scale so head is ~1.0 unit tall (from y=0 to y=1)
+    if ymax > 0:
+        s = 0.95 / ymax
+        v *= s
+    return v
+
+def simplify(verts, faces, target):
+    s = pyfqmr.Simplify()
+    s.setMesh(verts, faces)
+    s.simplify_mesh(target_count=target, aggressiveness=7, preserve_border=True)
+    nv, nf, _nn = s.getMesh()
+    return np.asarray(nv, dtype=np.float32), np.asarray(nf, dtype=np.int32)
+    return np.array(nv, dtype=np.float32), np.array(nf, dtype=np.int32)
+
+def compute_normals(v, f):
+    v0 = v[f[:,0]]; v1 = v[f[:,1]]; v2 = v[f[:,2]]
+    fn = np.cross(v1 - v0, v2 - v0)
+    ln = np.linalg.norm(fn, axis=1, keepdims=True)
+    ln[ln==0] = 1
+    fn = fn / ln
+    # smooth vertex normals
+    vn = np.zeros_like(v)
+    counts = np.zeros(len(v), dtype=np.int32)
+    for i in range(3):
+        np.add.at(vn, f[:,i], fn)
+        np.add.at(counts, f[:,i], 1)
+    counts[counts==0] = 1
+    vn = vn / counts[:,None]
+    ln = np.linalg.norm(vn, axis=1, keepdims=True)
+    ln[ln==0] = 1
+    vn = vn / ln
+    return vn.astype(np.float32)
+
+def deform(v, kind):
+    v = v.copy()
+    yn = v[:,1] / v[:,1].max() if v[:,1].max() > 0 else 0
+    if kind == 'female':
+        # narrower, more pointed chin
+        s = 1.0 - 0.10 * (1 - yn) ** 1.5
+        v[:,0] *= s; v[:,2] *= s
+        # bigger eyes: pull z slightly forward at eye area (y~0.6-0.75)
+        eye = (v[:,1] > 0.45) & (v[:,1] < 0.75)
+        v[eye, 2] += 0.015
+    elif kind == 'male':
+        # wider, square jaw
+        s = 1.0 + 0.07 * (1 - yn) ** 1.2
+        v[:,0] *= s; v[:,2] *= s
+        # stronger brow: shift brow area up & forward
+        brow = (v[:,1] > 0.65) & (v[:,1] < 0.78)
+        v[brow, 1] += 0.01
+    elif kind == 'child':
+        v *= 0.92
+        c = v.mean(axis=0)
+        v = c + (v - c) * 0.96
+    return v
+
+def write_headmodel_ts(path, v, f, vn, name, n_tris):
+    pos = v.flatten().tolist()  # flat list of values
+    nrm = vn.flatten().tolist()  # flat list of values
+    tri = []
+    for f_ in f:
+        tri.extend([int(f_[0]) + 1, int(f_[1]) + 1, int(f_[2]) + 1])  # 1-based
+    # Format as indented multi-line new Array(N) call
+    pos_str = ',\n  '.join(repr(x) for x in pos)
+    nrm_str = ',\n  '.join(repr(x) for x in nrm)
+    tri_str = ',\n  '.join(repr(x) for x in tri)
+    with open(path, 'w') as o:
+        o.write('// AUTO-GENERATED by tools/convert_mh.py — MakeHuman CC0\n')
+        o.write(f'// Source: assets/makehuman_base.obj (19158 verts, 18486 faces raw)\n')
+        o.write(f'// Variant: {name}\n')
+        o.write(f'// After decimation: {len(v)} verts, {n_tris} faces\n\n')
+        o.write(f'export const HEAD_N = {len(v)};\n')
+        o.write(f'export const HEAD_POS = new Float32Array([\n  {pos_str},\n]);\n')
+        o.write(f'export const HEAD_NRM = new Float32Array([\n  {nrm_str},\n]);\n')
+        o.write(f'export const HEAD_TRI_COUNT = {n_tris};\n')
+        o.write(f'export const HEAD_TRI = new Uint32Array([\n  {tri_str},\n]);\n')
+
+if __name__ == '__main__':
+    print('1. Loading base.obj...')
+    v0, f0 = load_obj(SRC)
+    print(f'   raw: {len(v0)} verts, {len(f0)} faces')
+
+    print('2. Cropping head (top 28% of body)...')
+    v1, f1 = crop_head(v0, f0, top_frac=0.0, bot_frac=0.71)
+    print(f'   head: {len(v1)} verts, {len(f1)} faces')
+
+    print('3. Centering & normalizing...')
+    v2 = orient_and_normalize(v1)
+    print(f'   range: x [{v2[:,0].min():.3f}, {v2[:,0].max():.3f}], '
+          f'y [{v2[:,1].min():.3f}, {v2[:,1].max():.3f}], '
+          f'z [{v2[:,2].min():.3f}, {v2[:,2].max():.3f}]')
+
+    print(f'4. Decimating to {TARGET_VERTS} verts (quadric)...')
+    v3, f3 = simplify(v2, f1, TARGET_VERTS)
+    n_tris = len(f3)
+    print(f'   decimated: {len(v3)} verts, {n_tris} faces')
+
+    print('5. Computing normals...')
+    vn0 = compute_normals(v3, f3)
+
+    print('6. Generating 4 variants...')
+    variants = [
+        ('m0_default', v3),
+        ('m1_female',  deform(v3, 'female')),
+        ('m2_male',    deform(v3, 'male')),
+        ('m3_child',   deform(v3, 'child')),
+    ]
+    for slug, vv in variants:
+        nn = compute_normals(vv, f3)
+        out = os.path.join(DST_DIR, f'headmodel_{slug}.ts')
+        write_headmodel_ts(out, vv, f3, nn, slug, n_tris)
+        print(f'   wrote {out} ({os.path.getsize(out)} bytes)')
+
+    print('Done.')

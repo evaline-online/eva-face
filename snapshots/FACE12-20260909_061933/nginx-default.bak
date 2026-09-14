@@ -1,0 +1,111 @@
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server;
+	root /var/www/html;
+	index index.html index.htm;
+	server_name _;
+
+	# Security headers
+	add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+	add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+	add_header X-Frame-Options "SAMEORIGIN" always;
+	add_header X-Content-Type-Options "nosniff" always;
+	add_header X-XSS-Protection "1; mode=block" always;
+	add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+	add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+	# Блокировать скрытые файлы и конфиги (.env, .git, .htaccess и т.д.)
+	location ~ /\.(?!well-known) {
+		return 404;
+		# Security headers for this location
+		add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-XSS-Protection "1; mode=block" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+	}
+
+	location = /docs { return 301 /docs/; }
+	location ^~ /docs/ {
+		alias /var/www/evabot-backend/docs-site/public/;
+		index index.html;
+		try_files $uri $uri/ $uri/index.html =404;
+		# Security headers for this location
+		add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-XSS-Protection "1; mode=block" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+	}
+
+	location = /voice { return 301 /voice/; }
+
+	location /voice/ {
+		proxy_pass http://127.0.0.1:8000/;
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection "upgrade";
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		# Security headers for this location
+		add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-XSS-Protection "1; mode=block" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+	}
+
+	location /api/ {
+		proxy_pass http://127.0.0.1:3000/api/;
+		proxy_http_version 1.1;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		# Security headers for this location
+		add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-XSS-Protection "1; mode=block" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+	}
+
+	location /face/ {
+		proxy_buffering off;
+		proxy_pass http://127.0.0.1:8093/;
+		proxy_http_version 1.1;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto $scheme;
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection "upgrade";
+		# Security headers for this location
+		add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-XSS-Protection "1; mode=block" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+	}
+
+	location / {
+		try_files $uri $uri/ /index.html =404;
+		add_header Cache-Control "no-cache, no-store, must-revalidate";
+		# Security headers for this location
+		add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-XSS-Protection "1; mode=block" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+	}
+}
