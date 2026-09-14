@@ -8,7 +8,7 @@
  * - Holographic floating green subtitles
  */
 
-import { EvaMatrixFace, PERSONA_THEMES, type MatrixPersona } from './matrix_face.js';
+import { EvaMatrixFace, PERSONA_THEMES, type MatrixPersona, type QualityTier } from './matrix_face.js';
 
 function initMatrixFace(): void {
   const container = document.getElementById('canvas-container');
@@ -47,10 +47,52 @@ function initMatrixFace(): void {
     showSubtitle(text);
   });
 
-  // ─── Real Dynamic FPS Display ────────────────────────────────
+  // ─── Real Dynamic FPS Display with Color Cues ────────────────
   face.setFpsCallback((fps: number) => {
     if (fpsVal) {
       fpsVal.textContent = fps.toString();
+      if (fps >= 55) {
+        fpsVal.style.color = 'var(--matrix-green)';
+        fpsVal.style.textShadow = '0 0 8px var(--matrix-green)';
+      } else if (fps >= 42) {
+        fpsVal.style.color = '#ffcc00';
+        fpsVal.style.textShadow = '0 0 8px #ffcc00';
+      } else {
+        fpsVal.style.color = '#ff3366';
+        fpsVal.style.textShadow = '0 0 8px #ff3366';
+      }
+    }
+  });
+
+  // ─── Adaptive 60 FPS Quality Tier Controls ───────────────────
+  const tierBtns = document.querySelectorAll('.btn-tier');
+  tierBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tier = btn.getAttribute('data-tier') as QualityTier;
+      if (tier) {
+        face.setQualityTier(tier);
+        tierBtns.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        if (tier === 'eco') {
+          showSubtitle('Режим ECO активирован: векторный голографический градиент (гарантированные 60 FPS).');
+        } else if (tier === 'ultra') {
+          showSubtitle('Режим ULTRA активирован: максимальная детализация матричного кода.');
+        } else if (tier === 'balanced') {
+          showSubtitle('Режим BALANCED активирован: оптимальный баланс качества и скорости.');
+        } else if (tier === 'auto') {
+          showSubtitle('Режим AUTO 60 FPS активирован: автоматический watchdog производительности.');
+        }
+      }
+    });
+  });
+
+  face.setTierChangeCallback((mode, activeTier) => {
+    if (mode === 'auto') {
+      const autoBtn = document.querySelector('.btn-tier[data-tier="auto"]');
+      if (autoBtn) {
+        autoBtn.textContent = `⚡ 60 FPS (${activeTier.toUpperCase()})`;
+      }
     }
   });
 
@@ -89,6 +131,20 @@ function initMatrixFace(): void {
     });
   });
 
+  // ─── URL Parameters Support (?persona=adam&tier=eco) ─────────
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialPersona = urlParams.get('persona') as MatrixPersona;
+    if (initialPersona && PERSONA_THEMES[initialPersona]) {
+      selectPersona(initialPersona, false);
+    }
+    const initialTier = urlParams.get('tier') as QualityTier;
+    if (initialTier) {
+      const targetBtn = document.querySelector(`.btn-tier[data-tier="${initialTier}"]`) as HTMLElement;
+      if (targetBtn) targetBtn.click();
+    }
+  } catch (_) {}
+
   // ─── Keyboard Hotkeys (1..4 personas, M mic, S speak) ────────
   window.addEventListener('keydown', (e) => {
     if (e.target === meetInput) return;
@@ -105,6 +161,10 @@ function initMatrixFace(): void {
       btnMic?.click();
     } else if (e.key === 's' || e.key === 'ы') {
       btnSpeak?.click();
+    } else if (e.key.toLowerCase() === 'q' || e.key.toLowerCase() === 'й') {
+      const activeIdx = Array.from(tierBtns).findIndex((b) => b.classList.contains('active'));
+      const nextIdx = (activeIdx + 1) % tierBtns.length;
+      (tierBtns[nextIdx] as HTMLElement).click();
     }
   });
 

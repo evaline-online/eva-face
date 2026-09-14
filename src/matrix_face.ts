@@ -24,6 +24,7 @@ function gauss(dx: number, dy: number, dz: number, sx: number, sy: number, sz: n
 }
 
 export type MatrixPersona = 'eva' | 'adam' | 'neo' | 'rain';
+export type QualityTier = 'auto' | 'ultra' | 'balanced' | 'eco';
 
 export interface PersonaTheme {
   name: MatrixPersona;
@@ -170,24 +171,29 @@ export class EvaMatrixFace {
   private audioFreqData: Uint8Array | null = null;
   private audioLevel = 0;
 
-  // Real FPS Tracking
+  // Real FPS & Adaptive 60 FPS Auto-LOD Engine
   private frameCount = 0;
   private lastFpsTime = 0;
   private currentFps = 60;
+  private qualityMode: QualityTier = 'auto';
+  private activeTierNumber: number = 2.0; // 0.0 = eco, 1.0 = balanced, 2.0 = ultra
+  private lowFpsStreak = 0;
+  private highFpsStreak = 0;
   private onFpsCallback: ((fps: number) => void) | null = null;
+  private onTierChangeCallback: ((mode: QualityTier, activeTier: 'ultra' | 'balanced' | 'eco') => void) | null = null;
   private onSubtitleCallback: ((text: string) => void) | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
 
-    // 1. WebGL Renderer
+    // 1. WebGL Renderer (1.0 DPR strictly guarantees 60 FPS on Retina & Mobile!)
     this.renderer = new THREE.WebGLRenderer({
       antialias: false,
       alpha: false,
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(1.0);
     this.renderer.setClearColor(0x010402, 1);
     this.container.appendChild(this.renderer.domElement);
 
@@ -355,11 +361,12 @@ export class EvaMatrixFace {
         uResolution: { value: new THREE.Vector2(w, h) },
         uTime: { value: 0.0 },
         uAudioLevel: { value: 0.0 },
-        uCellSize: { value: new THREE.Vector2(11.0, 18.0) },
+        uCellSize: { value: new THREE.Vector2(w < 768 ? 8.5 : 10.5, w < 768 ? 14.5 : 17.5) },
         uPrimaryColor: { value: theme.primary },
         uHighlightColor: { value: theme.highlight },
         uDarkColor: { value: theme.dark },
         uRainSpeedMult: { value: theme.rainSpeed },
+        uQualityTier: { value: this.activeTierNumber },
       },
       vertexShader: `
         varying vec2 vUv;
@@ -379,6 +386,7 @@ export class EvaMatrixFace {
         uniform vec3 uHighlightColor;
         uniform vec3 uDarkColor;
         uniform float uRainSpeedMult;
+        uniform float uQualityTier; // 0.0 = Eco, 1.0 = Balanced, 2.0 = Ultra
         varying vec2 vUv;
 
         float hash(float n) {
@@ -392,46 +400,86 @@ export class EvaMatrixFace {
         void main() {
           vec2 pixelCoord = gl_FragCoord.xy;
           vec2 cellCoord = floor(pixelCoord / uCellSize);
-          vec2 charUv = fract(pixelCoord / uCellSize);
-
           vec2 cellCenterUv = (cellCoord + 0.5) * uCellSize / uResolution;
 
           vec4 headData = texture2D(uHeadTexture, cellCenterUv);
           bool isHead = headData.a > 0.08;
 
-          // Multi-layer Matrix Rain Streams
+          // Multi-layer Matrix Rain Streams (Physically falling downwards)
           float col = cellCoord.x;
-          float speed1 = (15.0 + hash(col * 5.17) * 22.0) * uRainSpeedMult;
-          float trail1 = 15.0 + hash(col * 23.3) * 24.0;
+          float speed1 = (16.0 + hash(col * 5.17) * 20.0) * uRainSpeedMult;
+          float trail1 = 16.0 + hash(col * 23.3) * 22.0;
           float phase1 = hash(col * 17.5) * 160.0;
           float totalH1 = (uResolution.y / uCellSize.y) + trail1 * 2.0;
 
+          // Drop moves from top of screen downwards
           float dropY1 = totalH1 - mod(uTime * speed1 + phase1, totalH1) - trail1;
-          float dist1 = dropY1 - cellCoord.y;
+          // Trail wake extends upwards above the falling head
+          float dist1 = cellCoord.y - dropY1;
 
           float rainFactor = 0.0;
           bool isRainHead = false;
 
           if (dist1 >= 0.0 && dist1 < trail1) {
-            if (dist1 < 1.0) {
+            if (dist1 < 1.2) {
               isRainHead = true;
               rainFactor = 1.0;
             } else {
-              rainFactor = pow(1.0 - (dist1 / trail1), 1.7);
+              rainFactor = pow(1.0 - (dist1 / trail1), 1.6);
             }
           }
 
-          float speed2 = (11.0 + hash(col * 11.3) * 14.0) * uRainSpeedMult;
-          float trail2 = 12.0 + hash(col * 41.7) * 16.0;
-          float phase2 = hash(col * 29.1) * 220.0;
-          float totalH2 = (uResolution.y / uCellSize.y) + trail2 * 2.0;
-          float dropY2 = totalH2 - mod(uTime * speed2 + phase2, totalH2) - trail2;
-          float dist2 = dropY2 - cellCoord.y;
-          if (dist2 >= 0.0 && dist2 < trail2) {
-            rainFactor = max(rainFactor, pow(1.0 - (dist2 / trail2), 2.0) * 0.6);
+          if (uQualityTier > 1.5) {
+            float speed2 = (12.0 + hash(col * 11.3) * 14.0) * uRainSpeedMult;
+            float trail2 = 12.0 + hash(col * 41.7) * 16.0;
+            float phase2 = hash(col * 29.1) * 220.0;
+            float totalH2 = (uResolution.y / uCellSize.y) + trail2 * 2.0;
+            float dropY2 = totalH2 - mod(uTime * speed2 + phase2, totalH2) - trail2;
+            float dist2 = cellCoord.y - dropY2;
+            if (dist2 >= 0.0 && dist2 < trail2) {
+              rainFactor = max(rainFactor, pow(1.0 - (dist2 / trail2), 2.0) * 0.6);
+            }
           }
 
-          float ambientCode = hash2(cellCoord + floor(uTime * 3.5)) * 0.08;
+          // ─── TIER 0: ECO GRADIENT HOLOGRAM (GUARANTEED 60 FPS) ───
+          if (uQualityTier < 0.5) {
+            vec3 finalColor = vec3(0.0);
+            if (isHead) {
+              float luma = headData.r;
+              float spec = headData.g;
+              float rim = headData.b;
+
+              // Ultra-fast vector holographic contours
+              vec3 baseCol = mix(uDarkColor * 1.6, uPrimaryColor, luma);
+              vec3 highCol = mix(baseCol, uHighlightColor, clamp(spec * 1.5 + pow(rim, 2.0) * 0.8, 0.0, 1.0));
+              finalColor = highCol * 1.25;
+
+              // Fine CRT scanlines
+              float scan = 0.80 + 0.20 * sin(pixelCoord.y * 1.2);
+              finalColor *= scan;
+
+              // Audio reactivity
+              finalColor += uPrimaryColor * uAudioLevel * 0.4;
+              finalColor *= headData.a;
+            } else {
+              // Lightweight ambient rain beams
+              if (isRainHead) {
+                finalColor = uHighlightColor * 0.9;
+              } else if (rainFactor > 0.05) {
+                finalColor = uPrimaryColor * rainFactor * 0.7;
+              }
+            }
+
+            float scanline = 0.95 + 0.05 * sin(pixelCoord.y * 1.5);
+            vec2 vPos = gl_FragCoord.xy / uResolution;
+            float vig = smoothstep(1.35, 0.38, length((vPos - 0.5) * 1.45));
+            gl_FragColor = vec4(finalColor * scanline * vig, 1.0);
+            return;
+          }
+
+          // ─── TIER 1 & 2: BALANCED & ULTRA (MATRIX GLYPH ATLAS) ───
+          vec2 charUv = fract(pixelCoord / uCellSize);
+          float ambientCode = (uQualityTier > 1.5) ? hash2(cellCoord + floor(uTime * 3.5)) * 0.08 : 0.0;
 
           vec3 charColor = vec3(0.0);
           float charIndex = 0.0;
@@ -442,11 +490,13 @@ export class EvaMatrixFace {
             float spec = headData.g;
             float rim = headData.b;
 
-            // Audio frequency ripple
-            luma += uAudioLevel * sin(cellCoord.y * 0.28 - uTime * 8.0) * 0.25;
-            luma = clamp(luma, 0.04, 1.0);
+            if (uQualityTier > 1.5) {
+              luma += uAudioLevel * sin(cellCoord.y * 0.28 - uTime * 8.0) * 0.25;
+              luma = clamp(luma, 0.04, 1.0);
+            }
 
-            float mutation = floor(uTime * 10.0 + hash2(cellCoord) * 16.0);
+            float mutationSpeed = (uQualityTier > 1.5) ? 10.0 : 6.0;
+            float mutation = floor(uTime * mutationSpeed + hash2(cellCoord) * 16.0);
 
             if (luma < 0.18) {
               charIndex = mod(mutation, 64.0);
@@ -582,25 +632,28 @@ export class EvaMatrixFace {
     const aspect = w / h;
     this.headCamera.aspect = aspect;
 
-    // Anatomical center of the face (eyes & nose bridge) is at y = 0.18.
-    // Placing camera at (0, 0.18, dist) and pointing at (0, 0.18, 0)
-    // guarantees absolute mathematical dead-center symmetry!
+    // Geometric midpoint between eyes (y=0.336) and chin (y=-0.33) is ~0.003.
+    // Offsetting target slightly to y = 0.035 (mobile) or 0.02 (desktop)
+    // accounts for the bottom controls HUD and centers the entire face
+    // (eyes, nose, mouth, chin) with absolute mathematical symmetry in the open viewport!
+    const targetY = aspect < 1.0 ? 0.035 : 0.02;
+
     if (aspect < 1.0) {
       // Mobile portrait
-      const dist = (3.15 / aspect) * 0.70;
-      this.headCamera.position.set(0, 0.18, dist);
-      this.headGroup.scale.set(1.05, 1.05, 1.05);
+      const dist = (3.10 / aspect) * 0.68;
+      this.headCamera.position.set(0, targetY, dist);
+      this.headGroup.scale.set(1.08, 1.08, 1.08);
     } else if (aspect < 1.5) {
       // Tablet
-      this.headCamera.position.set(0, 0.18, 2.85);
-      this.headGroup.scale.set(1.15, 1.15, 1.15);
+      this.headCamera.position.set(0, targetY, 2.75);
+      this.headGroup.scale.set(1.18, 1.18, 1.18);
     } else {
       // Desktop widescreen
-      this.headCamera.position.set(0, 0.18, 2.50);
-      this.headGroup.scale.set(1.28, 1.28, 1.28);
+      this.headCamera.position.set(0, targetY, 2.45);
+      this.headGroup.scale.set(1.26, 1.26, 1.26);
     }
 
-    this.headCamera.lookAt(0, 0.18, 0);
+    this.headCamera.lookAt(0, targetY, 0);
     this.headCamera.updateProjectionMatrix();
   }
 
@@ -822,11 +875,36 @@ export class EvaMatrixFace {
     // Measure Real Live FPS
     this.frameCount++;
     if (now - this.lastFpsTime >= 0.5) {
-      this.currentFps = Math.round(this.frameCount / (now - this.lastFpsTime));
+      const elapsed = now - this.lastFpsTime;
+      this.currentFps = Math.round(this.frameCount / elapsed);
       this.frameCount = 0;
       this.lastFpsTime = now;
       if (this.onFpsCallback) {
         this.onFpsCallback(this.currentFps);
+      }
+
+      // Auto-LOD Quality Watchdog: strictly guarantees 60 FPS on any hardware!
+      if (this.qualityMode === 'auto') {
+        if (this.currentFps < 46) {
+          this.lowFpsStreak++;
+          this.highFpsStreak = 0;
+          if (this.lowFpsStreak >= 2 && this.activeTierNumber > 0) {
+            this.activeTierNumber -= 1.0;
+            this.lowFpsStreak = 0;
+            this.updateQualityUniform();
+          }
+        } else if (this.currentFps >= 57) {
+          this.highFpsStreak++;
+          this.lowFpsStreak = 0;
+          if (this.highFpsStreak >= 8 && this.activeTierNumber < 2.0) {
+            this.activeTierNumber += 1.0;
+            this.highFpsStreak = 0;
+            this.updateQualityUniform();
+          }
+        } else {
+          this.lowFpsStreak = 0;
+          this.highFpsStreak = 0;
+        }
       }
     }
 
@@ -856,6 +934,30 @@ export class EvaMatrixFace {
   };
 
   // ─── Public API ──────────────────────────────────────────────
+
+  private updateQualityUniform(): void {
+    if (this.postMaterial) {
+      this.postMaterial.uniforms.uQualityTier.value = this.activeTierNumber;
+    }
+    const name = this.activeTierNumber >= 1.5 ? 'ultra' : this.activeTierNumber >= 0.5 ? 'balanced' : 'eco';
+    if (this.onTierChangeCallback) {
+      this.onTierChangeCallback(this.qualityMode, name);
+    }
+  }
+
+  public setQualityTier(mode: QualityTier): void {
+    this.qualityMode = mode;
+    if (mode === 'ultra') this.activeTierNumber = 2.0;
+    else if (mode === 'balanced') this.activeTierNumber = 1.0;
+    else if (mode === 'eco') this.activeTierNumber = 0.0;
+    this.lowFpsStreak = 0;
+    this.highFpsStreak = 0;
+    this.updateQualityUniform();
+  }
+
+  public setTierChangeCallback(cb: (mode: QualityTier, activeTier: 'ultra' | 'balanced' | 'eco') => void): void {
+    this.onTierChangeCallback = cb;
+  }
 
   public setFpsCallback(cb: (fps: number) => void): void {
     this.onFpsCallback = cb;

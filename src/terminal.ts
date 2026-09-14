@@ -363,8 +363,8 @@ function renderFrame() {
   ensureBuffers(gridW * gridH);
   depthBuf.fill(-999, 0, gridW * gridH);
 
-  // 2. Camera & Scaling (Dead-Center at 0, 0.18, 0)
-  const headScale = Math.min(gridW * 0.27, gridH * 0.62);
+  // 2. Camera & Scaling (Dead-Center between Title Bar row 0 and Hint Bar row termH-1)
+  const headScale = Math.min(gridW * 0.27, gridH * 0.56);
   const sx = (headScale / cellAspect) * 1.05;
   const sy = headScale;
   const camZ = 2.45;
@@ -391,8 +391,8 @@ function renderFrame() {
       }
     }
 
-    // Centered rotation around (0, 0.18, 0)
-    y -= 0.18;
+    // Centered rotation around facial midpoint
+    y += 0.05;
     // Yaw (Y)
     const x1 = x * cosY + z * sinY;
     const z1 = -x * sinY + z * cosY;
@@ -404,7 +404,7 @@ function renderFrame() {
     const ny2 = ny * cosX - nz1 * sinX;
     const nz2 = ny * sinX + nz1 * cosX;
 
-    const finalY = y2 + 0.18 + breathY;
+    const finalY = y2 - 0.05 + breathY;
     vZ[i] = z2;
     nX[i] = nx1;
     nY[i] = ny2;
@@ -413,7 +413,7 @@ function renderFrame() {
     const dist = camZ - z2;
     const pers = camZ / Math.max(0.1, dist);
     sX[i] = gridW / 2 + x1 * sx * pers;
-    sY[i] = gridH / 2 - (finalY - 0.18) * sy * pers;
+    sY[i] = gridH / 2 - (finalY + 0.05) * sy * pers;
   }
 
   // 4. Triangle Rasterization with Z-Buffer
@@ -493,8 +493,8 @@ function renderFrame() {
           const dropY = Math.floor(rain.y);
           if (rowT === dropY) {
             curCells[outIdx] = `\x1b[38;2;${palette.highlight[0]};${palette.highlight[1]};${palette.highlight[2]}m▀`;
-          } else if (rowT > dropY && rowT < dropY + 6) {
-            const decay = 1 - (rowT - dropY) / 6;
+          } else if (rowT < dropY && rowT >= dropY - 7) {
+            const decay = 1 - (dropY - rowT) / 7;
             const r = Math.floor(palette.rain[0] * decay * 0.4);
             const g = Math.floor(palette.rain[1] * decay * 0.4);
             const b = Math.floor(palette.rain[2] * decay * 0.4);
@@ -605,12 +605,12 @@ function renderFrame() {
           if (j === dropY) {
             const glyph = rain.chars[0];
             curCells[outIdx] = `\x1b[38;2;${palette.highlight[0]};${palette.highlight[1]};${palette.highlight[2]}m${glyph}`;
-          } else if (j > dropY && j < dropY + 7) {
-            const decay = 1 - (j - dropY) / 7;
+          } else if (j < dropY && j >= dropY - 8) {
+            const decay = 1 - (dropY - j) / 8;
             const r = Math.floor(palette.rain[0] * decay * 0.45);
             const g = Math.floor(palette.rain[1] * decay * 0.45);
             const b = Math.floor(palette.rain[2] * decay * 0.45);
-            const glyph = rain.chars[(j - dropY) % rain.chars.length];
+            const glyph = rain.chars[(dropY - j) % rain.chars.length];
             curCells[outIdx] = `\x1b[38;2;${r};${g};${b}m${glyph}`;
           } else {
             curCells[outIdx] = ' ';
