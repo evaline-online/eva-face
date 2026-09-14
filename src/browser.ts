@@ -1,183 +1,187 @@
 /**
- * browser.ts — Interactive Cyberpunk Holographic Face of Eva & Adam.
- * Entrypoint for WebGL 3D face with fallback to Matrix canvas renderer.
+ * browser.ts — Interactive Minimalist 3D Matrix Face Entrypoint.
+ *
+ * Minimalist UI:
+ * - Only the 3D Matrix Face living substance
+ * - Real-time Voice (speech synthesis + speech recognition + mic FFT reactivity)
+ * - Google Meet integration (direct link connection & launcher)
+ * - Holographic floating green subtitles
  */
 
-import { EvaCyberFace, type RenderMode, type PersonaType } from './cyber_face.js';
+import { EvaMatrixFace } from './matrix_face.js';
 
-function initCyberFace(): void {
+function initMatrixFace(): void {
   const container = document.getElementById('canvas-container');
   if (!container) return;
 
-  const face = new EvaCyberFace(container);
+  const face = new EvaMatrixFace(container);
 
   // ─── UI References ──────────────────────────────────────────
-  const btnHybrid = document.getElementById('btn-hybrid');
-  const btnPoints = document.getElementById('btn-points');
-  const btnLines = document.getElementById('btn-lines');
-  const btnPolys = document.getElementById('btn-polys');
-  const btnMatrix = document.getElementById('btn-matrix');
-
-  const btnEva = document.getElementById('btn-persona-eva');
-  const btnAdam = document.getElementById('btn-persona-adam');
-  const btnOrbit = document.getElementById('btn-orbit');
-
-  const speechBalloon = document.getElementById('speech-balloon');
-  const chatInput = document.getElementById('chat-text') as HTMLInputElement | null;
-  const btnSend = document.getElementById('btn-send');
+  const subtitleBox = document.getElementById('subtitle-box');
+  const subtitleText = document.getElementById('subtitle-text');
   const btnMic = document.getElementById('btn-mic');
+  const btnSpeak = document.getElementById('btn-speak');
+  const meetInput = document.getElementById('meet-input') as HTMLInputElement | null;
+  const btnMeet = document.getElementById('btn-meet');
+  const meetStatus = document.getElementById('meet-status');
 
-  const promptIntro = document.getElementById('prompt-intro');
-  const promptArch = document.getElementById('prompt-arch');
-  const promptPresence = document.getElementById('prompt-presence');
-  const promptModes = document.getElementById('prompt-modes');
-
-  function setActiveModeBtn(activeBtn: HTMLElement | null): void {
-    [btnHybrid, btnPoints, btnLines, btnPolys, btnMatrix].forEach((btn) => {
-      btn?.classList.remove('active');
-    });
-    activeBtn?.classList.add('active');
-  }
-
-  function setActivePersonaBtn(activeBtn: HTMLElement | null): void {
-    [btnEva, btnAdam].forEach((btn) => {
-      btn?.classList.remove('active');
-    });
-    activeBtn?.classList.add('active');
-  }
+  let subtitleTimeout: any = null;
 
   function showSubtitle(text: string): void {
-    if (speechBalloon) {
-      speechBalloon.style.display = 'block';
-      speechBalloon.innerText = text;
-    }
+    if (!subtitleBox || !subtitleText) return;
+    subtitleText.textContent = text;
+    subtitleBox.style.opacity = '1';
+    subtitleBox.style.transform = 'translateY(0)';
+
+    if (subtitleTimeout) clearTimeout(subtitleTimeout);
+    subtitleTimeout = setTimeout(() => {
+      subtitleBox.style.opacity = '0';
+      subtitleBox.style.transform = 'translateY(10px)';
+    }, Math.max(3500, text.length * 80));
   }
 
-  function hideSubtitle(): void {
-    if (speechBalloon) {
-      speechBalloon.style.display = 'none';
-    }
-  }
-
-  function speakWithSubtitle(text: string): void {
+  face.setSubtitleCallback((text) => {
     showSubtitle(text);
-    face.speak(text, () => {
-      setTimeout(hideSubtitle, 1500);
-    });
+  });
+
+  // ─── Speech Recognition (Voice Input) ────────────────────────
+  let recognition: any = null;
+  let isListening = false;
+
+  const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (SpeechRec) {
+    recognition = new SpeechRec();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'ru-RU';
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[event.results.length - 1][0].transcript.trim();
+      if (!transcript) return;
+
+      showSubtitle(`Вы: "${transcript}"`);
+
+      // Natural response logic
+      setTimeout(() => {
+        respondToUser(transcript);
+      }, 700);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn('[Eva Voice] Recognition error:', event.error);
+    };
+
+    recognition.onend = () => {
+      if (isListening) {
+        try { recognition.start(); } catch (_) {}
+      }
+    };
   }
 
-  // ─── Mode Switching ─────────────────────────────────────────
-  btnHybrid?.addEventListener('click', () => {
-    face.setMode('hybrid');
-    setActiveModeBtn(btnHybrid);
-  });
-
-  btnPoints?.addEventListener('click', () => {
-    face.setMode('points');
-    setActiveModeBtn(btnPoints);
-  });
-
-  btnLines?.addEventListener('click', () => {
-    face.setMode('lines');
-    setActiveModeBtn(btnLines);
-  });
-
-  btnPolys?.addEventListener('click', () => {
-    face.setMode('polys');
-    setActiveModeBtn(btnPolys);
-  });
-
-  btnMatrix?.addEventListener('click', () => {
-    window.location.search = '?mode=matrix';
-  });
-
-  // ─── Persona Switching ──────────────────────────────────────
-  btnEva?.addEventListener('click', () => {
-    face.setPersona('eva');
-    setActivePersonaBtn(btnEva);
-    speakWithSubtitle('На связи Ева. Переключаю визуальное ядро на фронтенд-архитектуру и бренд.');
-  });
-
-  btnAdam?.addEventListener('click', () => {
-    face.setPersona('adam');
-    setActivePersonaBtn(btnAdam);
-    speakWithSubtitle('На связи Адам. Переключаю ядро на бэкенд, безопасность и инфраструктуру кластера.');
-  });
-
-  // ─── Auto Orbit Toggle ──────────────────────────────────────
-  btnOrbit?.addEventListener('click', () => {
-    const active = face.toggleAutoOrbit();
-    btnOrbit.style.color = active ? '#00f0ff' : '#94a3b8';
-    btnOrbit.style.borderColor = active ? '#00f0ff' : 'transparent';
-  });
-
-  // ─── Quick Prompts ──────────────────────────────────────────
-  promptIntro?.addEventListener('click', () => {
-    speakWithSubtitle(
-      'Здравствуйте! Я Ева — цифровой архитектор и амбассадор компании EvaLine. Мой интерактивный облик создан из точек, линий и полигонов. Рада приветствовать вас!'
-    );
-  });
-
-  promptArch?.addEventListener('click', () => {
-    speakWithSubtitle(
-      'Архитектура нашего кластера включает мощный вычислительный узел во Франкфурте на базе C3 Standard 8 и высокоскоростной шлюз в Айове с Caddy и Tailscale.'
-    );
-  });
-
-  promptPresence?.addEventListener('click', () => {
-    speakWithSubtitle(
-      'С новым модулем Eva Presence я могу подключаться к конференциям Google Meet и звонкам Telegram как реальный человек, общаясь голосом и отвечая в чате.'
-    );
-  });
-
-  promptModes?.addEventListener('click', () => {
-    speakWithSubtitle(
-      'Обратите внимание: сейчас активен гибридный режим — полупрозрачные полигоны, светящиеся нейронные линии и квантовые точки.'
-    );
-  });
-
-  // ─── Chat Input ─────────────────────────────────────────────
-  function handleSend(): void {
-    if (!chatInput) return;
-    const text = chatInput.value.trim();
-    if (!text) return;
-    speakWithSubtitle(text);
-    chatInput.value = '';
-  }
-
-  btnSend?.addEventListener('click', handleSend);
-  chatInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleSend();
-  });
-
-  // ─── Microphone Live Input ──────────────────────────────────
-  btnMic?.addEventListener('click', async () => {
-    const ok = await face.enableMicrophone();
-    if (ok) {
-      btnMic.classList.add('active');
-      showSubtitle('🎤 Слушаю ваш голос через микрофон... Лицо реагирует на частоты звука.');
-      setTimeout(hideSubtitle, 4000);
+  function respondToUser(query: string): void {
+    const q = query.toLowerCase();
+    if (q.includes('кто ты') || q.includes('представься')) {
+      face.speak('Я Ева — цифровая сущность из матричного пространства. Мой облик сформирован из потоков кода, света и теней.');
+    } else if (q.includes('гугл') || q.includes('мит') || q.includes('meet') || q.includes('конференц')) {
+      face.speak('Я готова войти в Google Meet. Введите ссылку на конференцию внизу экрана или нажмите кнопку запуска.');
+    } else if (q.includes('привет') || q.includes('здравствуй')) {
+      face.speak('Приветствую! Матричное ядро активно. Чем могу помочь?');
+    } else if (q.includes('голос') || q.includes('лицо')) {
+      face.speak('Мой облик отрисован в реальном времени через веб-джи-эль шейдер. Лицо плоское по сетке экрана, но живет в полном объеме три-дэ.');
     } else {
-      alert('Не удалось получить доступ к микрофону.');
+      face.speak(`Принято: "${query}". Матричный процессор обрабатывает команду.`);
+    }
+  }
+
+  // ─── Microphone Button ───────────────────────────────────────
+  btnMic?.addEventListener('click', async () => {
+    if (!isListening) {
+      const ok = await face.enableMicrophone();
+      if (ok) {
+        isListening = true;
+        btnMic.classList.add('active');
+        const icon = btnMic.querySelector('.mic-icon');
+        if (icon) icon.textContent = '🔴';
+        const label = btnMic.querySelector('.btn-label');
+        if (label) label.textContent = 'Слушаю...';
+
+        if (recognition) {
+          try { recognition.start(); } catch (_) {}
+        }
+        showSubtitle('Микрофон включен. Говорите — лицо реагирует на голос.');
+      } else {
+        alert('Не удалось получить доступ к микрофону.');
+      }
+    } else {
+      isListening = false;
+      btnMic.classList.remove('active');
+      const icon = btnMic.querySelector('.mic-icon');
+      if (icon) icon.textContent = '🎤';
+      const label = btnMic.querySelector('.btn-label');
+      if (label) label.textContent = 'Голос';
+
+      if (recognition) {
+        try { recognition.stop(); } catch (_) {}
+      }
+      showSubtitle('Микрофон выключен.');
     }
   });
 
-  // Greet user on startup after slight delay
+  // ─── Speak Button (Ask Eva) ──────────────────────────────────
+  btnSpeak?.addEventListener('click', () => {
+    const greetings = [
+      'Приветствую. Матричный облик активирован. Я готова к подключению в Google Meet и работе.',
+      'На связи Ева. Лицо сформировано из потоков символов, градиентов света и теней.',
+      'Все системы кластера в норме. Готова к диалогу и участию в онлайн-конференциях.'
+    ];
+    const phrase = greetings[Math.floor(Math.random() * greetings.length)];
+    face.speak(phrase);
+  });
+
+  // ─── Google Meet Connector ───────────────────────────────────
+  btnMeet?.addEventListener('click', async () => {
+    let meetUrl = meetInput?.value.trim() || '';
+
+    if (!meetUrl) {
+      meetUrl = 'https://meet.google.com/new';
+    } else if (!meetUrl.startsWith('http')) {
+      meetUrl = `https://meet.google.com/${meetUrl.replace(/^https?:\/\/meet\.google\.com\//, '')}`;
+    }
+
+    face.speak('Подключаюсь к сессии Google Meet. Запускаю модуль присутствия.');
+
+    if (meetStatus) {
+      meetStatus.style.display = 'inline-block';
+      meetStatus.textContent = '● ВХОД В GOOGLE MEET...';
+      setTimeout(() => {
+        meetStatus.textContent = '● В СЕССИИ';
+      }, 4000);
+    }
+
+    // Try calling backend launcher daemon or open browser window
+    try {
+      fetch('/api/meet/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: meetUrl, room: meetUrl }),
+      }).catch(() => {});
+    } catch (_) {}
+
+    // Open Google Meet room
+    setTimeout(() => {
+      window.open(meetUrl, '_blank');
+    }, 1200);
+  });
+
+  // Initial welcome greeting after load
   setTimeout(() => {
-    speakWithSubtitle('Приветствую! Я готова к работе.');
-  }, 1000);
+    face.speak('Приветствую! Я Ева. Мой облик воссоздан из матричного кода.');
+  }, 900);
 }
 
-// Check for matrix mode override
-if (window.location.search.includes('mode=matrix')) {
-  // Classic matrix fallback if explicitly requested
-  import('./capability.js').then(() => {
-    console.log('[Eva Face] Running in matrix fallback mode');
-  });
+// Start on DOM ready
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  initMatrixFace();
 } else {
-  // Standard modern 3D WebGL cyber face
-  window.addEventListener('DOMContentLoaded', initCyberFace);
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    initCyberFace();
-  }
+  window.addEventListener('DOMContentLoaded', initMatrixFace);
 }
