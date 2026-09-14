@@ -20,11 +20,85 @@ import {
   type QualityTier,
 } from './matrix_face.js';
 
+// ─── Procedural Web Audio Cyber SFX (Zero External Files) ─────
+class MatrixAudioFx {
+  private ctx: AudioContext | null = null;
+  public enabled: boolean = true;
+
+  private getContext(): AudioContext | null {
+    if (!this.ctx && typeof AudioContext !== 'undefined') {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+    return this.ctx;
+  }
+
+  public playChirp(freq: number = 720): void {
+    if (!this.enabled) return;
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.6, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (_) {}
+  }
+
+  public playDeckOpen(): void {
+    if (!this.enabled) return;
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(120, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.22);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.22);
+    } catch (_) {}
+  }
+
+  public playPing(): void {
+    if (!this.enabled) return;
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(980, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(520, ctx.currentTime + 0.14);
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.14);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.14);
+    } catch (_) {}
+  }
+}
+
 function initMatrixFace(): void {
   const container = document.getElementById('canvas-container');
   if (!container) return;
 
   const face = new EvaMatrixFace(container);
+  const sfx = new MatrixAudioFx();
 
   // ─── UI References ──────────────────────────────────────────
   const btnMasterDeck = document.getElementById('btn-master-deck');
@@ -45,6 +119,8 @@ function initMatrixFace(): void {
   const btnMeet = document.getElementById('btn-meet');
   const btnNewMeet = document.getElementById('btn-new-meet');
   const btnRecenter = document.getElementById('btn-recenter');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const btnSfx = document.getElementById('btn-sfx');
 
   let subtitleTimeout: any = null;
 
@@ -52,6 +128,7 @@ function initMatrixFace(): void {
   function openDeck(): void {
     if (!deckBackdrop) return;
     deckBackdrop.classList.add('open');
+    sfx.playDeckOpen();
   }
 
   function closeDeck(): void {
@@ -122,6 +199,7 @@ function initMatrixFace(): void {
   // ─── 4D Variant Selector ────────────────────────────────────
   function selectVariant(variantKey: Eva4DVariant, announce: boolean = true): void {
     face.setVariant(variantKey);
+    sfx.playChirp(760);
 
     variantCards.forEach((card) => {
       if (card.getAttribute('data-variant') === variantKey) {
@@ -166,6 +244,7 @@ function initMatrixFace(): void {
         face.setQualityTier(tier);
         tierBtns.forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
+        sfx.playChirp(540);
 
         if (tier === 'eco') {
           showSubtitle('Режим ECO активирован: векторные сканлайны без текстурных выборок (строгие 60 FPS).');
@@ -192,7 +271,29 @@ function initMatrixFace(): void {
   // ─── Recenter Calibration Button ─────────────────────────────
   btnRecenter?.addEventListener('click', () => {
     face.recenter();
+    sfx.playPing();
     showSubtitle('Голова Евы откалибрована строго по центру экрана.');
+  });
+
+  // ─── Fullscreen Toggle ───────────────────────────────────────
+  function toggleFullscreen(): void {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  btnFullscreen?.addEventListener('click', () => {
+    toggleFullscreen();
+    sfx.playChirp(840);
+  });
+
+  // ─── SFX Audio Toggle ────────────────────────────────────────
+  btnSfx?.addEventListener('click', () => {
+    sfx.enabled = !sfx.enabled;
+    btnSfx.textContent = sfx.enabled ? '🔊 FX: ВКЛ' : '🔇 FX: ВЫКЛ';
+    if (sfx.enabled) sfx.playChirp(920);
   });
 
   // ─── Keyboard Hotkeys ────────────────────────────────────────
@@ -206,8 +307,6 @@ function initMatrixFace(): void {
     }
 
     if (e.key === ' ' || e.key.toLowerCase() === 'm' || e.key.toLowerCase() === 'ь') {
-      // If modal is closed and Space/M pressed, open it.
-      // If modal is open: Space/M toggles it.
       e.preventDefault();
       toggleDeck();
       return;
@@ -222,7 +321,11 @@ function initMatrixFace(): void {
     else if (e.key === '7') selectVariant('wireframe');
     else if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'к') {
       face.recenter();
+      sfx.playPing();
       showSubtitle('Центровка сброшена: голова Евы строго по центру.');
+    } else if (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'а') {
+      toggleFullscreen();
+      sfx.playChirp(840);
     } else if (e.key.toLowerCase() === 'q' || e.key.toLowerCase() === 'й') {
       const activeIdx = Array.from(tierBtns).findIndex((b) => b.classList.contains('active'));
       const nextIdx = (activeIdx + 1) % tierBtns.length;

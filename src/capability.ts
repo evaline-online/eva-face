@@ -32,7 +32,7 @@ function tryGetExecSync(): ((cmd: string) => Buffer) | null {
 }
 
 export type RenderMode = 'color' | 'grey' | 'mono';
-export type GlyphRamp = 'binary' | 'half' | 'quarter' | 'braille' | 'matrix';
+export type GlyphRamp = 'binary' | 'half' | 'quarter' | 'braille';
 
 function envFlag(name: string): boolean {
   if (typeof process === 'undefined') return false;
@@ -92,7 +92,6 @@ export const RAMP_HALF    = ' ▀▄█';            // half-block: upper/lower/
 export const RAMP_QUARTER = ' ▖▗▘▙▚▞▛▜▝▟█';    // 2×2 sub-cells = 16 levels
 export const RAMP_BRAILLE = '⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿'; // 2×4 dots = 64 levels
 export const RAMP_BINARY  = '01';
-export const RAMP_MATRIX  = ':.=+*170AZX日田目ШЖ08B@%#';
 
 // 2x2 Bayer matrix (0..1) — ordered dithering lets a pure 0/1 ramp carry
 // smooth shading: mid tones become a checkerboard mix of 0s and 1s.
@@ -177,8 +176,6 @@ export function pickChar(
       center = 0.50; span = 0.55; temporalBand = 0.10; break;
     case 'braille':
       center = 0.50; span = 0.60; temporalBand = 0.12; break;
-    case 'matrix':
-      center = 0.50; span = 0.55; temporalBand = 0.08; break;
   }
 
   const threshold = center + (dither - 0.5) * span;
@@ -192,7 +189,6 @@ export function pickChar(
   if (ramp !== 'binary') {
     const rampStr = ramp === 'half' ? RAMP_HALF
       : ramp === 'quarter' ? RAMP_QUARTER
-      : ramp === 'matrix' ? RAMP_MATRIX
       : RAMP_BRAILLE;
     const idx = Math.floor(i * (rampStr.length - 1));
     return rampStr[Math.max(0, Math.min(rampStr.length - 1, idx))];
