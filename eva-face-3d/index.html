@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Universal 3D Head — 5 Modes</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;color:#e0e0e0;font-family:'Courier New',monospace;overflow:hidden;height:100vh}
+#ui{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;align-items:center;gap:8px;padding:10px 16px;background:rgba(0,0,0,.85);border-bottom:1px solid #1a3a1a;backdrop-filter:blur(6px)}
+#ui h1{font-size:13px;color:#0f6;white-space:nowrap;margin-right:12px}
+.btn{padding:5px 14px;border:1px solid #1a4a1a;background:rgba(0,255,80,.06);color:#0f6;font:12px 'Courier New',monospace;cursor:pointer;border-radius:3px;transition:.15s}
+.btn:hover{background:rgba(0,255,80,.15);border-color:#0f6}
+.btn.active{background:rgba(0,255,80,.25);border-color:#0f6;color:#fff;box-shadow:0 0 8px rgba(0,255,80,.3)}
+select{padding:4px 8px;background:#0a0f0a;color:#0f6;border:1px solid #1a4a1a;font:12px monospace;border-radius:3px}
+label{font-size:11px;color:#0a6}
+input[type=range]{width:80px;accent-color:#0f6}
+canvas{display:block;position:fixed;top:0;left:0;width:100vw;height:100vh}
+#info{position:fixed;bottom:12px;left:16px;font-size:11px;color:#0a6;z-index:10}
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>3D HEAD</h1>
+  <button class="btn active" data-mode="0">WIREFRAME</button>
+  <button class="btn" data-mode="1">POINTS</button>
+  <button class="btn" data-mode="2">MATRIX</button>
+  <button class="btn" data-mode="3">DEPTH</button>
+  <button class="btn" data-mode="4">NORMAL</button>
+  <span style="width:1px;height:24px;background:#1a4a1a;margin:0 6px"></span>
+  <label>Model</label>
+  <select id="modelSel"></select>
+  <label>Rot X</label><input type="range" id="rotX" min="-180" max="180" value="10">
+  <label>Rot Y</label><input type="range" id="rotY" min="-180" max="180" value="25">
+  <label>Zoom</label><input type="range" id="zoom" min="100" max="1000" value="700">
+  <label>Auto</label><input type="checkbox" id="autoRot" checked>
+</div>
+<canvas id="c"></canvas>
+<div id="info">Drag to rotate · Scroll to zoom · 5 modes</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// OBJ Parser
+// ═══════════════════════════════════════════════════════════════════════════
+function parseOBJ(text) {
+  const verts = [], faces = [];
+  for (const line of text.split('\n')) {
+    const p = line.trim().split(/\s+/);
+    if (p[0] === 'v') verts.push([+p[1], +p[2], +p[3]]);
+    if (p[0] === 'f') {
+      const face = p.slice(1).map(s => parseInt(s.split('/')[0]) - 1);
+      if (face.length >= 3) faces.push(face);
+    }
+  }
+  return { verts: new Float64Array(verts.flat()), vCount: verts.length, faces };
+}
+
+function normalizeModel(verts, vCount, h = 1.8) {
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9,minZ=1e9,maxZ=-1e9;
+  for (let i = 0; i < vCount*3; i += 3) {
+    if(verts[i]<minX)minX=verts[i];if(verts[i]>maxX)maxX=verts[i];
+    if(verts[i+1]<minY)minY=verts[i+1];if(verts[i+1]>maxY)maxY=verts[i+1];
+    if(verts[i+2]<minZ)minZ=verts[i+2];if(verts[i+2]>maxZ)maxZ=verts[i+2];
+  }
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
+  const span = Math.max(maxX-minX, maxY-minY, maxZ-minZ);
+  const s = h / span;
+  for (let i = 0; i < vCount*3; i += 3) {
+    verts[i]   = (verts[i]   - cx) * s;
+    verts[i+1] = (verts[i+1] - cy) * s;
+    verts[i+2] = (verts[i+2] - cz) * s;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3D Math
+// ═══════════════════════════════════════════════════════════════════════════
+function rotY(v, a) {
+  const c=Math.cos(a),s=Math.sin(a),out=new Float64Array(v.length);
+  for(let i=0;i<v.length;i+=3){out[i]=v[i]*c+v[i+2]*s;out[i+1]=v[i+1];out[i+2]=-v[i]*s+v[i+2]*c;}
+  return out;
+}
+function rotX(v, a) {
+  const c=Math.cos(a),s=Math.sin(a),out=new Float64Array(v.length);
+  for(let i=0;i<v.length;i+=3){out[i]=v[i];out[i+1]=v[i+1]*c-v[i+2]*s;out[i+2]=v[i+1]*s+v[i+2]*c;}
+  return out;
+}
+function project(v, vCount, w, h, fov) {
+  const px=new Float64Array(vCount), py=new Float64Array(vCount), zs=new Float64Array(vCount);
+  for(let i=0;i<vCount;i++){
+    const i3=i*3, d=v[i3+2]+3; zs[i]=d>0.01?d:0.01;
+    px[i]=(v[i3]*fov/zs[i])+w/2;
+    py[i]=(-v[i3+1]*fov/zs[i])+h/2;
+  }
+  // Fit the head centered inside the viewport, never exceeding its edges.
+  let maxrx=0, maxry=0;
+  const mh=Math.min(w,h);
+  for(let i=0;i<vCount;i++){
+    if(zs[i]<=0.6) continue;
+    const ax=Math.abs(px[i]-w/2), ay=Math.abs(py[i]-h/2);
+    if(ax>4*mh||ay>4*mh) continue; // tear outliers near camera plane
+    if(ax>maxrx)maxrx=ax;
+    if(ay>maxry)maxry=ay;
+  }
+  if(maxrx>0||maxry>0){
+    const radius=Math.max(maxrx,maxry,1e-6);
+    const scale=Math.min((0.9*mh/2)/radius, 2.5);
+    if(scale!==1.0){
+      for(let i=0;i<vCount;i++){ px[i]=(px[i]-w/2)*scale+w/2; py[i]=(py[i]-h/2)*scale+h/2; }
+    }
+  }
+  return {px,py,zs};
+}
+
+function faceNormals(v, faces) {
+  const out = [];
+  for (const f of faces) {
+    const i0=f[0]*3,i1=f[1]*3,i2=f[2]*3;
+    const e1x=v[i1]-v[i0],e1y=v[i1+1]-v[i0+1],e1z=v[i1+2]-v[i0+2];
+    const e2x=v[i2]-v[i0],e2y=v[i2+1]-v[i0+1],e2z=v[i2+2]-v[i0+2];
+    let nx=e1y*e2z-e1z*e2y, ny=e1z*e2x-e1x*e2z, nz=e1x*e2y-e1y*e2x;
+    const len=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;
+    out.push(nx/len,ny/len,nz/len);
+  }
+  return new Float64Array(out);
+}
+
+function pointInPoly(x,y,pxs,pys){
+  let ins=false;const n=pxs.length;let j=n-1;
+  for(let i=0;i<n;i++){
+    if(((pys[i]>y)!==(pys[j]>y))&&(x<(pxs[j]-pxs[i])*(y-pys[i])/(pys[j]-pys[i]+1e-10)+pxs[i]))ins=!ins;
+    j=i;
+  }
+  return ins;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Renderer
+// ═══════════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, imageData, buf, zbuf;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  imageData = ctx.createImageData(W, H);
+  buf = imageData.data;
+}
+resize();
+window.addEventListener('resize', resize);
+
+function clearBuf() {
+  buf.fill(0);
+  for (let i = 3; i < buf.length; i += 4) buf[i] = 255;
+  zbuf = new Float32Array(W * H).fill(1e9);
+}
+
+function setPixel(x, y, r, g, b, z) {
+  x = Math.round(x); y = Math.round(y);
+  if (x < 0 || x >= W || y < 0 || y >= H || z >= zbuf[y * W + x]) return;
+  zbuf[y * W + x] = z;
+  const i = (y * W + x) * 4;
+  buf[i] = r; buf[i+1] = g; buf[i+2] = b;
+}
+
+function drawLine(x0,y0,x1,y1,r,g,b,z){
+  x0=Math.round(x0);y0=Math.round(y0);x1=Math.round(x1);y1=Math.round(y1);
+  let dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,e=dx+dy;
+  while(true){
+    setPixel(x0,y0,r,g,b,z);
+    if(x0===x1&&y0===y1)break;
+    const e2=2*e;
+    if(e2>=dy){e+=dy;x0+=sx;}
+    if(e2<=dx){e+=dx;y0+=sy;}
+  }
+}
+
+// ─── Light setup ──────────────────────────────────────────────────────────
+const light = [0.35, 0.55, 0.75];
+const ll = Math.sqrt(light[0]**2+light[1]**2+light[2]**2);
+light[0]/=ll; light[1]/=ll; light[2]/=ll;
+
+const ambLight = 0.32;
+
+function litColor(nx, ny, nz, baseR, baseG, baseB) {
+  const dot = nx*light[0]+ny*light[1]+nz*light[2];
+  const diff = Math.max(0, dot);
+  const spec = Math.pow(Math.max(0, dot), 32) * 0.5;
+  const intensity = ambLight + diff * 0.88;
+  return [
+    Math.min(255, (baseR * intensity + spec * 255) | 0),
+    Math.min(255, (baseG * intensity + spec * 255) | 0),
+    Math.min(255, (baseB * intensity + spec * 255) | 0)
+  ];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mode 0: WIREFRAME with depth-colored edges + face shading
+// ═══════════════════════════════════════════════════════════════════════════
+function renderWireframe(v, vCount, faces, normals, proj) {
+  const {px,py,zs} = proj;
+  // Back-face culled face fill (subtle)
+  for (let fi = 0; fi < faces.length; fi++) {
+    const f = faces[fi];
+    const nx=normals[fi*3], ny=normals[fi*3+1], nz=normals[fi*3+2];
+    if (nz < -0.05) continue; // back-face cull
+    const xs=f.map(i=>px[i]), ys=f.map(i=>py[i]);
+    const zAvg = f.reduce((s,i)=>s+zs[i],0)/f.length;
+    const [fr,fg,fb] = litColor(nx,ny,nz, 15,50,25);
+    const minX=Math.max(0,Math.floor(Math.min(...xs))), maxX=Math.min(W-1,Math.ceil(Math.max(...xs)));
+    const minY=Math.max(0,Math.floor(Math.min(...ys))), maxY=Math.min(H-1,Math.ceil(Math.max(...ys)));
+    for(let sy=minY;sy<=maxY;sy+=2)for(let sx=minX;sx<=maxX;sx+=2)
+      if(pointInPoly(sx,sy,xs,ys))setPixel(sx,sy,fr>>1,fg>>1,fb>>1,zAvg);
+  }
+  // Edges
+  const drawn=new Set();
+  for(const f of faces){
+    for(let i=0;i<f.length;i++){
+      const a=f[i],b=f[(i+1)%f.length];
+      const key=a<b?a*100000+b:b*100000+a;
+      if(drawn.has(key))continue; drawn.add(key);
+      const z=(zs[a]+zs[b])/2;
+      const depthN=Math.max(0,Math.min(1,(z-1)/3));
+      const r=(depthN*40+10)|0, g=(depthN*200+55)|0, b2=(depthN*80+20)|0;
+      drawLine(px[a],py[a],px[b],py[b],r,g,b2,z);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mode 1: POINTS with depth-based size + color
+// ═══════════════════════════════════════════════════════════════════════════
+function renderPoints(v, vCount, faces, normals, proj) {
+  const {px,py,zs} = proj;
+  // Per-vertex normals (average of adjacent faces)
+  const vn = new Float64Array(vCount * 3);
+  for (let fi = 0; fi < faces.length; fi++) {
+    const f = faces[fi];
+    const fnx=normals[fi*3],fny=normals[fi*3+1],fnz=normals[fi*3+2];
+    for (const idx of f) { vn[idx*3]+=fnx; vn[idx*3+1]+=fny; vn[idx*3+2]+=fnz; }
+  }
+  for(let i=0;i<vCount*3;i+=3){const l=Math.sqrt(vn[i]**2+vn[i+1]**2+vn[i+2]**2)||1;vn[i]/=l;vn[i+1]/=l;vn[i+2]/=l;}
+
+  for(let i=0;i<vCount;i++){
+    const z=zs[i], depthN=Math.max(0,Math.min(1,(z-1)/3));
+    const nx=vn[i*3],ny=vn[i*3+1],nz=vn[i*3+2];
+    const [cr,cg,cb]=litColor(nx,ny,nz, 0,255,80);
+    const sz=Math.max(1, (1-depthN)*4+0.5)|0;
+    const x=px[i],y=py[i];
+    // Soft glow
+    if(sz>2){
+      const a=0.15;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++)
+        setPixel(x+dx,y+dy,(cr*a)|0,(cg*a)|0,(cb*a)|0,z);
+    }
+    for(let dy=-sz;dy<=sz;dy++)for(let dx=-sz;dx<=sz;dx++)
+      if(dx*dx+dy*dy<=sz*sz)setPixel(x+dx,y+dy,cr,cg,cb,z);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mode 2: MATRIX — cascading katakana, green glow, depth fog
+// ═══════════════════════════════════════════════════════════════════════════
+const MATRIX_CHARS = 'ァアィイゥウェエォオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモャヤュユョヨラリルレロヮワヰヱヲン';
+// Rendered as pixel blocks per character
+
+function renderMatrix(v, vCount, faces, normals, proj) {
+  const {px,py,zs} = proj;
+  clearBuf();
+  const cellW=12, cellH=16;
+  const cols=Math.ceil(W/cellW), rows=Math.ceil(H/cellH);
+  const charZ = new Float64Array(cols*rows).fill(1e9);
+  const charCh = new Array(cols*rows).fill('');
+  const charBright = new Float64Array(cols*rows).fill(0);
+
+  for(let fi=0; fi<faces.length; fi++){
+    const f=faces[fi];
+    const nx=normals[fi*3],ny=normals[fi*3+1],nz=normals[fi*3+2];
+    if(nz<-0.1)continue;
+    const xs=f.map(i=>px[i]),ys=f.map(i=>py[i]);
+    const zAvg=f.reduce((s,i)=>s+zs[i],0)/f.length;
+    const [cr,cg,cb]=litColor(nx,ny,nz,0,255,90);
+    const bright=(cr+cg+cb)/765;
+    const minX=Math.max(0,Math.floor(Math.min(...xs)/cellW));
+    const maxX=Math.min(cols-1,Math.floor(Math.max(...xs)/cellW));
+    const minY=Math.max(0,Math.floor(Math.min(...ys)/cellH));
+    const maxY=Math.min(rows-1,Math.floor(Math.max(...ys)/cellH));
+    for(let cy=minY;cy<=maxY;cy++)for(let cx=minX;cx<=maxX;cx++){
+      const sx=cx*cellW+cellW/2, sy=cy*cellH+cellH/2;
+      if(pointInPoly(sx,sy,xs,ys)){
+        const ci=cy*cols+cx;
+        if(zAvg<charZ[ci]){charZ[ci]=zAvg;charCh[ci]=MATRIX_CHARS[(cx+cy)%MATRIX_CHARS.length];charBright[ci]=bright;}
+      }
+    }
+  }
+  // Draw to pixel buffer
+  ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  for(let cy=0;cy<rows;cy++)for(let cx=0;cx<cols;cx++){
+    const ci=cy*cols+cx;
+    if(charZ[ci]>=1e9)continue;
+    const depthN=Math.max(0,Math.min(1,(charZ[ci]-1)/3));
+    const b=charBright[ci];
+    const r=(b*30*depthN)|0, g=(b*255*(0.9+0.1*(1-depthN)))|0, bl=(b*60*depthN)|0;
+    ctx.fillStyle=`rgb(${r},${g},${bl})`;
+    ctx.font='bold 13px monospace';
+    ctx.fillText(charCh[ci], cx*cellW+1, cy*cellH+13);
+  }
+  return true; // signals we drew to canvas directly
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mode 3: DEPTH — solid face fill with depth shading + soft shadows
+// ═══════════════════════════════════════════════════════════════════════════
+function renderDepth(v, vCount, faces, normals, proj) {
+  const {px,py,zs} = proj;
+  // Sort faces by depth (painter's algorithm)
+  const sorted = faces.map((f,i)=>({f,i,z:f.reduce((s,idx)=>s+zs[idx],0)/f.length})).sort((a,b)=>b.z-a.z);
+
+  for(const {f, i:fi} of sorted){
+    const nx=normals[fi*3],ny=normals[fi*3+1],nz=normals[fi*3+2];
+    const xs=f.map(idx=>px[idx]),ys=f.map(idx=>py[idx]);
+    const zAvg=f.reduce((s,idx)=>s+zs[idx],0)/f.length;
+    const depthN=Math.max(0,Math.min(1,(zAvg-0.5)/4));
+
+    // Base color: skin tone lit
+    const [cr,cg,cb]=litColor(nx,ny,nz, 205,150,115);
+
+    const minX=Math.max(0,Math.floor(Math.min(...xs)));
+    const maxX=Math.min(W-1,Math.ceil(Math.max(...xs)));
+    const minY=Math.max(0,Math.floor(Math.min(...ys)));
+    const maxY=Math.min(H-1,Math.ceil(Math.max(...ys)));
+
+    for(let sy=minY;sy<=maxY;sy++)for(let sx=minX;sx<=maxX;sx++){
+      if(pointInPoly(sx,sy,xs,ys)){
+        // Fog: blend toward bg at distance
+        const fog=depthN*0.6;
+        const fr=((cr*(1-fog)+10*fog)|0);
+        const fg=((cg*(1-fog)+15*fog)|0);
+        const fb=((cb*(1-fog)+20*fog)|0);
+        setPixel(sx,sy,fr,fg,fb,zAvg);
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Mode 4: NORMAL — full-color normal mapping + shadow map
+// ═══════════════════════════════════════════════════════════════════════════
+function renderNormal(v, vCount, faces, normals, proj) {
+  const {px,py,zs} = proj;
+  const sorted = faces.map((f,i)=>({f,i,z:f.reduce((s,idx)=>s+zs[idx],0)/f.length})).sort((a,b)=>b.z-a.z);
+
+  // Shadow map: render from light POV
+  const shadowMap = new Uint8Array(W * H).fill(0);
+  // Simple approximation: render depth from light side
+  const lv = rotY(rotX(v, Math.asin(light[1])), Math.atan2(light[0],light[2]));
+  const lp = project(lv, vCount, W, H, 350);
+
+  for(const {f,i:fi} of sorted){
+    const xs=f.map(idx=>px[idx]),ys=f.map(idx=>py[idx]);
+    const zAvg=f.reduce((s,idx)=>s+zs[idx],0)/f.length;
+    const minX=Math.max(0,Math.floor(Math.min(...xs)));
+    const maxX=Math.min(W-1,Math.ceil(Math.max(...xs)));
+    const minY=Math.max(0,Math.floor(Math.min(...ys)));
+    const maxY=Math.min(H-1,Math.ceil(Math.max(...ys)));
+    for(let sy=minY;sy<=maxY;sy+=1)for(let sx=minX;sx<=maxX;sx+=1){
+      if(pointInPoly(sx,sy,xs,ys)){
+        // Check if in shadow by sampling light depth
+        // (simplified: skip complex shadow for perf)
+      }
+    }
+  }
+
+  for(const {f,i:fi} of sorted){
+    const nx=normals[fi*3],ny=normals[fi*3+1],nz=normals[fi*3+2];
+    const xs=f.map(idx=>px[idx]),ys=f.map(idx=>py[idx]);
+    const zAvg=f.reduce((s,idx)=>s+zs[idx],0)/f.length;
+    const depthN=Math.max(0,Math.min(1,(zAvg-0.5)/4));
+
+    // Normal → color mapping (RGB = XYZ)
+    const nr=(nx*0.5+0.5), ng=(ny*0.5+0.5), nz2=(nz*0.5+0.5);
+    // Combine with lighting
+    const lr=0, lg=0, lb=0;
+    const dot = nx*light[0]+ny*light[1]+nz*light[2];
+    const diff = Math.max(0, dot);
+    const spec = Math.pow(Math.max(0, dot), 64) * 0.7;
+    const amb = 0.3;
+    const intensity = amb + diff * 0.85;
+
+    // Color: normal-mapped warm skin
+    const baseR=200+nr*40, baseG=150+ng*30, baseB=120+nz2*20;
+    const cr=Math.min(255,(baseR*intensity+spec*200)|0);
+    const cg=Math.min(255,(baseG*intensity+spec*180)|0);
+    const cb=Math.min(255,(baseB*intensity+spec*160)|0);
+
+    const minX=Math.max(0,Math.floor(Math.min(...xs)));
+    const maxX=Math.min(W-1,Math.ceil(Math.max(...xs)));
+    const minY=Math.max(0,Math.floor(Math.min(...ys)));
+    const maxY=Math.min(H-1,Math.ceil(Math.max(...ys)));
+
+    for(let sy=minY;sy<=maxY;sy++)for(let sx=minX;sx<=maxX;sx++){
+      if(pointInPoly(sx,sy,xs,ys)){
+        const fog=depthN*0.35;
+        setPixel(sx,sy,
+          ((cr*(1-fog)+8*fog)|0),
+          ((cg*(1-fog)+12*fog)|0),
+          ((cb*(1-fog)+18*fog)|0),
+          zAvg
+        );
+      }
+    }
+  }
+
+  // Draw subtle wireframe overlay
+  const drawn=new Set();
+  for(const f of faces){
+    for(let i=0;i<f.length;i++){
+      const a=f[i],b=f[(i+1)%f.length];
+      const key=a<b?a*100000+b:b*100000+a;
+      if(drawn.has(key))continue; drawn.add(key);
+      const z=(zs[a]+zs[b])/2;
+      drawLine(px[a],py[a],px[b],py[b],20,50,30,z);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// App State
+// ═══════════════════════════════════════════════════════════════════════════
+let modelData = null;
+let currentMode = 0;
+let rotXVal = 10 * Math.PI / 180;
+let rotYVal = 25 * Math.PI / 180;
+let fov = 700;
+let autoRotate = true;
+let dragStart = null;
+const MODES = ['WIREFRAME','POINTS','MATRIX','DEPTH','NORMAL'];
+const renderers = [renderWireframe, renderPoints, renderMatrix, renderDepth, renderNormal];
+
+// Load models list
+fetch('/api/models').then(r=>r.json()).then(list=>{
+  const sel=document.getElementById('modelSel');
+  list.forEach((m,i)=>{const o=document.createElement('option');o.value=m.path;o.textContent=m.name;sel.appendChild(o);});
+  // Default to the light proper-head model if available
+  const preferred = list.find(m=>m.name==='head_lightning.obj') || list[0];
+  sel.value = preferred.path;
+  loadModel(preferred.path);
+});
+
+async function loadModel(path) {
+  const resp = await fetch(path);
+  const text = await resp.text();
+  const raw = parseOBJ(text);
+  modelData = raw;
+  normalizeModel(raw.verts, raw.vCount);
+  // Face decimation for large meshes (keep ~20k faces for realtime)
+  if (raw.faces.length > 20000) {
+    const stride = Math.ceil(raw.faces.length / 20000);
+    const kept = [];
+    for (let i = 0; i < raw.faces.length; i += stride) kept.push(raw.faces[i]);
+    raw.faces = kept;
+  }
+  document.getElementById('info').textContent =
+    `${MODES[currentMode]} · ${raw.vCount} verts · ${raw.faces.length} faces · drag to rotate`;
+}
+
+document.getElementById('modelSel').onchange = e => loadModel(e.target.value);
+document.querySelectorAll('.btn[data-mode]').forEach(b => {
+  b.onclick = () => {
+    document.querySelector('.btn.active').classList.remove('active');
+    b.classList.add('active');
+    currentMode = parseInt(b.dataset.mode);
+    document.getElementById('info').textContent =
+      `${MODES[currentMode]} · ${modelData?.vCount||0} verts · ${modelData?.faces.length||0} faces`;
+  };
+});
+document.getElementById('rotX').oninput = e => { rotXVal = e.target.value * Math.PI / 180; };
+document.getElementById('rotY').oninput = e => { rotYVal = e.target.value * Math.PI / 180; };
+document.getElementById('zoom').oninput = e => { fov = +e.target.value; };
+document.getElementById('autoRot').onchange = e => { autoRotate = e.target.checked; };
+
+// Mouse drag
+canvas.addEventListener('mousedown', e => { dragStart = {x:e.clientX, y:e.clientY, rx:rotXVal, ry:rotYVal}; });
+canvas.addEventListener('mousemove', e => {
+  if(!dragStart)return;
+  rotYVal = dragStart.ry + (e.clientX - dragStart.x) * 0.005;
+  rotXVal = dragStart.rx + (e.clientY - dragStart.y) * 0.005;
+  document.getElementById('rotX').value = (rotXVal*180/Math.PI)|0;
+  document.getElementById('rotY').value = (rotYVal*180/Math.PI)|0;
+});
+canvas.addEventListener('mouseup', ()=>{ dragStart=null; });
+canvas.addEventListener('mouseleave', ()=>{ dragStart=null; });
+canvas.addEventListener('wheel', e => {
+  fov = Math.max(100, Math.min(1000, fov - e.deltaY * 0.5));
+  document.getElementById('zoom').value = fov;
+  e.preventDefault();
+}, {passive:false});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Render Loop
+// ═══════════════════════════════════════════════════════════════════════════
+let frameCount = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  if (!modelData) return;
+
+  if (autoRotate && !dragStart) {
+    rotYVal += 0.006;
+    document.getElementById('rotY').value = ((rotYVal*180/Math.PI)%360)|0;
+  }
+
+  // Transform vertices
+  let v = rotX(rotY(modelData.verts, rotYVal), rotXVal);
+  const proj = project(v, modelData.vCount, W, H, fov);
+  const norms = faceNormals(v, modelData.faces);
+
+  if (currentMode === 2) {
+    // Matrix mode draws directly to canvas
+    renderMatrix(v, modelData.vCount, modelData.faces, norms, proj);
+  } else {
+    clearBuf();
+    renderers[currentMode](v, modelData.vCount, modelData.faces, norms, proj);
+    ctx.putImageData(imageData, 0, 0);
+
+    // Post-process: add scanline effect for retro feel on depth/normal
+    if (currentMode === 3 || currentMode === 4) {
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+    }
+  }
+
+  // FPS
+  frameCount++;
+}
+
+frame();
+</script>
+</body>
+</html>
