@@ -55,36 +55,95 @@ function disableRawMode() {
   showCursor();
 }
 
-// ─── Mouse State ───────────────────────────────────────────────
+// ─── Persona & Color Themes ────────────────────────────────────
+
+type TermPersona = 'eva' | 'adam' | 'neo' | 'rain';
+let currentPersona: TermPersona = 'eva';
+
+const PERSONA_NAMES: Record<TermPersona, string> = {
+  eva: 'EVA (MATRIX GREEN)',
+  adam: 'ADAM (CYBER AMBER)',
+  neo: 'NEO (ELECTRA CYAN)',
+  rain: 'RAIN (EMERALD)',
+};
+
+function personaColor(r: number, g: number, b: number, persona: TermPersona): [number, number, number] {
+  const intensity = Math.max(r, Math.max(g, b)) / 255;
+  if (intensity <= 0.05) return [0, 0, 0];
+
+  switch (persona) {
+    case 'eva':
+      // Matrix Phosphor Green
+      return [
+        Math.floor(intensity * 35),
+        Math.floor(intensity * 255),
+        Math.floor(intensity * 95),
+      ];
+    case 'adam':
+      // Cyber Amber Gold
+      return [
+        Math.floor(intensity * 255),
+        Math.floor(intensity * 175),
+        Math.floor(intensity * 20),
+      ];
+    case 'neo':
+      // Electric Cyan
+      return [
+        Math.floor(intensity * 20),
+        Math.floor(intensity * 235),
+        Math.floor(intensity * 255),
+      ];
+    case 'rain':
+      // Deep Emerald Rain
+      return [
+        Math.floor(intensity * 25),
+        Math.floor(intensity * 255),
+        Math.floor(intensity * 60),
+      ];
+  }
+}
+
+// ─── Mouse & Spring Physics State ──────────────────────────────
 
 let mouseX = 0;
 let mouseY = 0;
-let targetRX = 0;
-let targetRY = 0;
+let dragRotX = 0;
+let dragRotY = 0;
 let rotX = 0;
 let rotY = 0;
 let dragging = false;
 let lastMX = 0;
 let lastMY = 0;
 let autoRotY = 0;
-// Startup view is a straight FRONT portrait; idle auto-sway only begins
-// after the first mouse event.
 let hasInteracted = false;
 let termW = 80;
 let termH = 24;
 
-// ─── Parse Mouse Input ─────────────────────────────────────────
+// ─── Parse Mouse & Keyboard Input ──────────────────────────────
 
 let inputBuffer = '';
 let buttonDown = false; // true while left button is held
 
 function handleInput(data: Buffer) {
   const str = data.toString('utf8');
+
+  // Handle keyboard shortcuts (single keystroke)
+  if (str === '\u0003' || str.toLowerCase() === 'q') {
+    disableRawMode();
+    clearScreen();
+    process.exit(0);
+  }
+  if (str === '1') { currentPersona = 'eva'; }
+  else if (str === '2') { currentPersona = 'adam'; }
+  else if (str === '3') { currentPersona = 'neo'; }
+  else if (str === '4') { currentPersona = 'rain'; }
+  else if (str.toLowerCase() === 'r') {
+    rotX = 0; rotY = 0; dragRotX = 0; dragRotY = 0; mouseX = 0; mouseY = 0;
+  }
+
   inputBuffer += str;
 
   // Parse SGR mouse: ESC [ < Cb ; Cx ; Cy M/m
-  //   M (uppercase) = press or motion · m (lowercase) = release
-  //   In SGR format a release may arrive as Cb (same as press) or Cb+3.
   const mouseRegex = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
   let match;
   while ((match = mouseRegex.exec(inputBuffer)) !== null) {
@@ -95,30 +154,26 @@ function handleInput(data: Buffer) {
     const btn = rawBtn >= 32 ? rawBtn - 32 : rawBtn; // motion-with-button mask
 
     if (isRelease || rawBtn % 32 >= 3) {
-      // Button released
+      // Button released -> Spring return initiates automatically
       if (btn === 0) {
         dragging = false;
         buttonDown = false;
       }
     } else if (rawBtn === 0 || rawBtn === 32) {
       if (rawBtn === 0 && !buttonDown) {
-        // First <0> event while up = real left-button press; without
-        // button state tracking, 1003-motion events (also <0;M>) would
-        // be misread as presses. Distinguish them via buttonDown.
         dragging = true;
         buttonDown = true;
         lastMX = x;
         lastMY = y;
       } else if (rawBtn === 32) {
-        // Motion with no button held (mode 1003 any-motion)
         dragging = false;
         buttonDown = false;
       } else if (dragging) {
-        // Drag motion while held → accumulate rotation
-        const dx = (x - lastMX) / termW * 3;
-        const dy = (y - lastMY) / termH * 3;
-        targetRY += dx;
-        targetRX += dy;
+        // Drag motion while held -> accumulate 3D rotation
+        const dx = (x - lastMX) / termW * 2.8;
+        const dy = (y - lastMY) / termH * 2.8;
+        dragRotY += dx;
+        dragRotX += dy;
         lastMX = x;
         lastMY = y;
       }
@@ -128,19 +183,11 @@ function handleInput(data: Buffer) {
     mouseY = (y / termH) * 2 - 1;
     hasInteracted = true;
 
-    // Head follows cursor unless the user is mid-drag (then we keep the
-    // rotation they've turned to and only add the drag offset above).
-    if (!dragging) {
-      targetRX = mouseY * 0.25;
-      targetRY = mouseX * 0.4;
-    }
-
     inputBuffer = inputBuffer.substring(match.index + match[0].length);
   }
 
   // Check for partial escape sequence at end
   if (inputBuffer.startsWith('\x1b') && !inputBuffer.match(/\x1b\[</)) {
-    // Might be a key press — ignore for now
     if (inputBuffer.length > 1) inputBuffer = '';
   }
 
@@ -305,16 +352,25 @@ function render() {
     clearScreen();
   }
 
-  // Smooth rotation
-  const lerpSpeed = dragging ? 8 : 3;
-  rotX += (targetRX - rotX) * Math.min(1, dt * lerpSpeed);
-  rotY += (targetRY - rotY) * Math.min(1, dt * lerpSpeed);
+  // Smooth gaze and rotation tracking with elastic spring return
+  if (!dragging) {
+    dragRotX *= 0.88;
+    dragRotY *= 0.88;
+    if (Math.abs(dragRotX) < 0.0001) dragRotX = 0;
+    if (Math.abs(dragRotY) < 0.0001) dragRotY = 0;
+  }
+
+  const targetRX = (mouseY * 0.25) + dragRotX;
+  let targetRY = (mouseX * 0.40) + dragRotY;
 
   if (!dragging && hasInteracted) {
     autoRotY += dt * 0.3;
-    const autoTarget = targetRY + Math.sin(autoRotY) * 0.15;
-    rotY += (autoTarget - rotY) * dt * 0.5;
+    targetRY += Math.sin(autoRotY) * 0.10;
   }
+
+  const lerpSpeed = dragging ? 8 : 4;
+  rotX += (targetRX - rotX) * Math.min(1, dt * lerpSpeed);
+  rotY += (targetRY - rotY) * Math.min(1, dt * lerpSpeed);
 
   // Face params
   const params = computeParams(time, mouseX, mouseY, dragging);
@@ -355,11 +411,12 @@ function render() {
       const idx = j * termW + i;
 
       if (tFace || bFace) {
-        // Face cell: upper-half digit glyph tinted with the upper pixel color,
-        // lower half painted via background color (when both rows are face).
+        // Face cell: persona-tinted color
         const f = tFace ? t! : b!;
         const bg = tFace && bFace ? b! : null;
-        cur[idx] = ansiFg(f.r, f.g, f.b) + (bg ? ansiBg(bg.r, bg.g, bg.b) : '') + f.ch;
+        const [fr, fg, fb] = personaColor(f.r, f.g, f.b, currentPersona);
+        const [bgr, bgg, bgb] = bg ? personaColor(bg.r, bg.g, bg.b, currentPersona) : [0, 0, 0];
+        cur[idx] = ansiFg(fr, fg, fb) + (bg ? ansiBg(bgr, bgg, bgb) : '') + f.ch;
       } else {
         // Background: matrix rain, resolved on the virtual-row grid.
         let topRain = 0;
@@ -395,17 +452,18 @@ function render() {
   dtMsAvg = dtMsAvg * 0.9 + (dt * 1000) * 0.1;
   cpuMsAvg = cpuMsAvg * 0.9 + cpuMs * 0.1;
   const fps = 1000 / Math.max(dtMsAvg, 0.01);
-  const title = ` 🟢 EVA MATRIX 3D FACE · ${RENDER_MODE.toUpperCase()} · ${fps.toFixed(0)}fps ${cpuMsAvg.toFixed(1)}ms `;
+  const pName = PERSONA_NAMES[currentPersona];
+  const title = ` 🟢 ${pName} · ${RENDER_MODE.toUpperCase()} · ${fps.toFixed(0)}fps ${cpuMsAvg.toFixed(1)}ms `;
   const titleX = Math.max(0, Math.floor((termW - title.length) / 2));
   for (let k = 0; k < title.length && titleX + k < termW; k++) {
     cur[titleX + k] = ansiFg(0, 255, 0) + title[k];
   }
   if (termH > 1) {
-    const hint = ' Move mouse: head follows | Click+drag: rotate | Ctrl+C: quit ';
+    const hint = ' Keys: [1] Eva [2] Adam [3] Neo [4] Rain | Mouse: Gaze | Drag: Rotate | [r] Center | [q] Quit ';
     const hintX = Math.max(0, Math.floor((termW - hint.length) / 2));
     const base = (termH - 1) * termW;
     for (let k = 0; k < hint.length && hintX + k < termW; k++) {
-      cur[base + hintX + k] = ansiFg(0, 100, 0) + hint[k];
+      cur[base + hintX + k] = ansiFg(0, 150, 50) + hint[k];
     }
   }
 

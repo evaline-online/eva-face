@@ -8,7 +8,7 @@
  * - Holographic floating green subtitles
  */
 
-import { EvaMatrixFace } from './matrix_face.js';
+import { EvaMatrixFace, PERSONA_THEMES, type MatrixPersona } from './matrix_face.js';
 
 function initMatrixFace(): void {
   const container = document.getElementById('canvas-container');
@@ -24,6 +24,9 @@ function initMatrixFace(): void {
   const meetInput = document.getElementById('meet-input') as HTMLInputElement | null;
   const btnMeet = document.getElementById('btn-meet');
   const meetStatus = document.getElementById('meet-status');
+  const personaTitle = document.getElementById('persona-title');
+  const personaBtns = document.querySelectorAll('.btn-persona');
+  const fpsVal = document.getElementById('fps-val');
 
   let subtitleTimeout: any = null;
 
@@ -42,6 +45,67 @@ function initMatrixFace(): void {
 
   face.setSubtitleCallback((text) => {
     showSubtitle(text);
+  });
+
+  // ─── Real Dynamic FPS Display ────────────────────────────────
+  face.setFpsCallback((fps: number) => {
+    if (fpsVal) {
+      fpsVal.textContent = fps.toString();
+    }
+  });
+
+  // ─── Multi-Persona Switcher ──────────────────────────────────
+  function selectPersona(personaKey: MatrixPersona, announce: boolean = true): void {
+    face.setPersona(personaKey);
+
+    personaBtns.forEach((b) => {
+      if (b.getAttribute('data-persona') === personaKey) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+    });
+
+    const theme = PERSONA_THEMES[personaKey];
+    if (theme && personaTitle) {
+      personaTitle.textContent = `${theme.title} // 3D CORE`;
+    }
+
+    if (announce) {
+      const names: Record<MatrixPersona, string> = {
+        eva: 'Активирован протокол Ева. Зеленый матричный люминофор.',
+        adam: 'Активирован протокол Адам. Кибернетическое золото и строгие черты.',
+        neo: 'Активирован протокол Нео. Электрический циановый код.',
+        rain: 'Активирован режим Дождь. Чистый поток матричного кода.'
+      };
+      face.speak(names[personaKey]);
+    }
+  }
+
+  personaBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const p = btn.getAttribute('data-persona') as MatrixPersona;
+      if (p) selectPersona(p);
+    });
+  });
+
+  // ─── Keyboard Hotkeys (1..4 personas, M mic, S speak) ────────
+  window.addEventListener('keydown', (e) => {
+    if (e.target === meetInput) return;
+
+    if (e.key === '1') {
+      selectPersona('eva');
+    } else if (e.key === '2') {
+      selectPersona('adam');
+    } else if (e.key === '3') {
+      selectPersona('neo');
+    } else if (e.key === '4') {
+      selectPersona('rain');
+    } else if (e.key === 'm' || e.key === 'ь') {
+      btnMic?.click();
+    } else if (e.key === 's' || e.key === 'ы') {
+      btnSpeak?.click();
+    }
   });
 
   // ─── Speech Recognition (Voice Input) ────────────────────────

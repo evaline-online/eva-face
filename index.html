@@ -112,6 +112,85 @@
     padding: 6px 14px;
     border-radius: 20px;
     backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .fps-badge {
+    color: #ffffff;
+    font-weight: 700;
+    text-shadow: 0 0 8px var(--matrix-green);
+  }
+
+  #fps-val {
+    color: var(--matrix-green);
+  }
+
+  /* ─── Persona Switcher Bar ─────────────────────────────────── */
+  .persona-switcher {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    padding: 4px 8px;
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 0 16px rgba(0, 255, 102, 0.15);
+  }
+
+  .btn-persona {
+    background: transparent;
+    border: 1px solid transparent;
+    color: rgba(255, 255, 255, 0.65);
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 5px 12px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    outline: none;
+  }
+
+  .btn-persona:hover {
+    color: #ffffff;
+    border-color: rgba(0, 255, 102, 0.4);
+    background: rgba(0, 255, 102, 0.12);
+  }
+
+  .btn-persona.active {
+    background: rgba(0, 255, 102, 0.22);
+    border-color: var(--matrix-green);
+    color: var(--matrix-green);
+    box-shadow: 0 0 12px rgba(0, 255, 102, 0.5);
+    text-shadow: 0 0 8px rgba(0, 255, 102, 0.8);
+  }
+
+  .btn-persona[data-persona="adam"].active {
+    background: rgba(255, 180, 0, 0.22);
+    border-color: #ffb400;
+    color: #ffb400;
+    box-shadow: 0 0 12px rgba(255, 180, 0, 0.5);
+    text-shadow: 0 0 8px rgba(255, 180, 0, 0.8);
+  }
+
+  .btn-persona[data-persona="neo"].active {
+    background: rgba(0, 240, 255, 0.22);
+    border-color: #00f0ff;
+    color: #00f0ff;
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.5);
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+  }
+
+  .btn-persona[data-persona="rain"].active {
+    background: rgba(50, 255, 120, 0.22);
+    border-color: #32ff78;
+    color: #32ff78;
+    box-shadow: 0 0 12px rgba(50, 255, 120, 0.5);
+    text-shadow: 0 0 8px rgba(50, 255, 120, 0.8);
   }
 
   /* ─── Bottom Area: Subtitles + Minimalist Controls ─────────── */
@@ -291,7 +370,24 @@
 
   /* ─── Responsive Adjustments ───────────────────────────────── */
   @media (max-width: 768px) {
-    .hud-overlay { padding: 14px 16px; }
+    .hud-overlay { padding: 12px 14px; }
+    .top-hud {
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+    }
+    .persona-switcher {
+      order: 3;
+      width: 100%;
+      justify-content: space-around;
+      margin-top: 2px;
+    }
+    .btn-persona {
+      padding: 5px 10px;
+      font-size: 10px;
+    }
+    .brand-title { font-size: 11px; letter-spacing: 1.5px; }
+    .meta-more { display: none; }
     .bottom-hud {
       gap: 8px;
       padding: 8px 10px;
@@ -300,8 +396,6 @@
       width: 100%;
       min-width: 100%;
     }
-    .brand-title { font-size: 11px; }
-    .system-meta { display: none; }
     .subtitle-content { font-size: 13px; padding: 10px 14px; }
   }
 </style>
@@ -315,10 +409,21 @@
   <header class="top-hud">
     <div class="brand-badge interactive">
       <div class="pulse-dot"></div>
-      <span class="brand-title">EVA MATRIX CORE // 3D SYNC</span>
+      <span class="brand-title" id="persona-title">EVA MATRIX CORE // 3D SYNC</span>
     </div>
+
+    <!-- Multi-Persona Face Switcher -->
+    <div class="persona-switcher interactive">
+      <button class="btn-persona active" data-persona="eva" title="Eva (Matrix Phosphor)">EVA</button>
+      <button class="btn-persona" data-persona="adam" title="Adam (Amber Cyber)">ADAM</button>
+      <button class="btn-persona" data-persona="neo" title="Neo (Cyan Electra)">NEO</button>
+      <button class="btn-persona" data-persona="rain" title="Rain (Matrix Rain)">RAIN</button>
+    </div>
+
+    <!-- Live Dynamic FPS & WebRTC Status -->
     <div class="system-meta interactive">
-      <span>100.66.98.4 · 60 FPS · WEBRTC READY</span>
+      <span class="fps-badge"><span id="fps-val">60</span> FPS</span>
+      <span class="meta-more">· 100.66.98.4 · WEBRTC READY</span>
     </div>
   </header>
 
