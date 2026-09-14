@@ -569,7 +569,7 @@ export class EvaCyberFace {
     // 2. Audio-driven frequency energy
     let audioEnergy = 0;
     if (this.analyser && this.audioFreqData) {
-      this.analyser.getByteFrequencyData(this.audioFreqData);
+      this.analyser.getByteFrequencyData(this.audioFreqData as any);
       let sum = 0;
       for (let i = 0; i < 16; i++) sum += this.audioFreqData[i];
       audioEnergy = (sum / 16) / 255;

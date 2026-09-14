@@ -220,6 +220,8 @@ interface RainDrop {
 
 let rain: RainDrop[] = [];
 
+const RAIN_CHARS = '日ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵ0123456789+*=';
+
 // Rain lives on the VIRTUAL-row grid (termH*2 in half-block mode). The
 // `rows` param is the virtual height; drop y-coordinates are virtual rows.
 function initRain(rows: number) {
@@ -228,9 +230,9 @@ function initRain(rows: number) {
     rain.push({
       x: i,
       y: Math.random() * rows * 2 - rows,
-      speed: 0.15 + Math.random() * 0.6, // half-rows/sec ≈ old cell speed
-      char: Math.random() > 0.5 ? '0' : '1',
-      bright: Math.random() < 0.08,
+      speed: 0.15 + Math.random() * 0.6,
+      char: RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)],
+      bright: Math.random() < 0.10,
     });
   }
 }
@@ -241,9 +243,9 @@ function updateRain(dt: number, rows: number) {
     if (drop.y > rows + 2) {
       drop.y = -1 - Math.random() * 8;
       drop.x = Math.floor(Math.random() * termW);
-      drop.char = Math.random() > 0.5 ? '0' : '1';
+      drop.char = RAIN_CHARS[Math.floor(Math.random() * RAIN_CHARS.length)];
       drop.speed = 0.15 + Math.random() * 0.6;
-      drop.bright = Math.random() < 0.08;
+      drop.bright = Math.random() < 0.10;
     }
   }
   // Adjust rain array size if terminal resized
@@ -330,7 +332,7 @@ function render() {
   // Project (cellAspect ≈ 0.5 for terminal cells: ~2x taller than wide)
   // Eyes (pupils + irises) track the cursor via gaze, same as the browser.
   const result = projectAndShade(mesh, rotX, rotY, 0, termW, GH, aspect,
-    { gx: mouseX, gy: mouseY }, RENDER_MODE, (process.env.FACE_RAMP as GlyphRamp) || 'half');
+    { gx: mouseX, gy: mouseY }, RENDER_MODE, (process.env.FACE_RAMP as GlyphRamp) || 'matrix');
 
   // Update rain (lives on the same virtual-row grid)
   updateRain(dt, GH);
@@ -393,7 +395,7 @@ function render() {
   dtMsAvg = dtMsAvg * 0.9 + (dt * 1000) * 0.1;
   cpuMsAvg = cpuMsAvg * 0.9 + cpuMs * 0.1;
   const fps = 1000 / Math.max(dtMsAvg, 0.01);
-  const title = ` MATRIX FACE · ${RENDER_MODE.toUpperCase()}${HALF ? ' · 2×' : ''} · ${fps.toFixed(0)}fps ${cpuMsAvg.toFixed(1)}ms `;
+  const title = ` 🟢 EVA MATRIX 3D FACE · ${RENDER_MODE.toUpperCase()} · ${fps.toFixed(0)}fps ${cpuMsAvg.toFixed(1)}ms `;
   const titleX = Math.max(0, Math.floor((termW - title.length) / 2));
   for (let k = 0; k < title.length && titleX + k < termW; k++) {
     cur[titleX + k] = ansiFg(0, 255, 0) + title[k];

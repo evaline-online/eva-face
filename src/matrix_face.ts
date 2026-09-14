@@ -677,7 +677,7 @@ export class EvaMatrixFace {
 
     // 1. Process Microphone FFT if active
     if (this.analyser && this.audioFreqData) {
-      this.analyser.getByteFrequencyData(this.audioFreqData);
+      this.analyser.getByteFrequencyData(this.audioFreqData as any);
       let sum = 0;
       for (let i = 0; i < 32; i++) {
         sum += this.audioFreqData[i];
