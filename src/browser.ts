@@ -1,14 +1,24 @@
 /**
- * browser.ts — Interactive Minimalist 3D Matrix Face Entrypoint.
+ * browser.ts — Universal Single-Page 4D Matrix Head Entrypoint.
  *
- * Minimalist UI:
- * - Only the 3D Matrix Face living substance
- * - Real-time Voice (speech synthesis + speech recognition + mic FFT reactivity)
- * - Google Meet integration (direct link connection & launcher)
- * - Holographic floating green subtitles
+ * Architecture:
+ * - Minimalist viewport: Only the centered 3D Matrix Head living substance
+ * - Single master control button opening the 4D Master Control Deck Modal
+ * - 7 Authentic 4D Eva variants:
+ *   [1] Phosphor Green, [2] Vector Hologram Eco 60 FPS, [3] Electra Cyan,
+ *   [4] Solar Amber, [5] Rain Cascade, [6] Solid HD, [7] Cyber Wireframe
+ * - Guaranteed 60 FPS engine with adaptive watchdog
+ * - Voice speech synthesis & speech recognition
+ * - Google Meet direct connection & meeting creation
+ * - Hotkeys: [Space/M] menu, [1..7] 4D variant, [Q] 60 FPS quality, [R] recenter, [Esc] close
  */
 
-import { EvaMatrixFace, PERSONA_THEMES, type MatrixPersona, type QualityTier } from './matrix_face.js';
+import {
+  EvaMatrixFace,
+  EVA_4D_VARIANTS,
+  type Eva4DVariant,
+  type QualityTier,
+} from './matrix_face.js';
 
 function initMatrixFace(): void {
   const container = document.getElementById('canvas-container');
@@ -17,19 +27,64 @@ function initMatrixFace(): void {
   const face = new EvaMatrixFace(container);
 
   // ─── UI References ──────────────────────────────────────────
+  const btnMasterDeck = document.getElementById('btn-master-deck');
+  const deckBackdrop = document.getElementById('deck-backdrop');
+  const deckModal = document.getElementById('deck-modal');
+  const btnCloseDeck = document.getElementById('btn-close-deck');
+  const activeVariantLabel = document.getElementById('active-variant-label');
+
   const subtitleBox = document.getElementById('subtitle-box');
   const subtitleText = document.getElementById('subtitle-text');
+  const fpsVal = document.getElementById('fps-val');
+
+  const variantCards = document.querySelectorAll('.btn-variant-card');
+  const tierBtns = document.querySelectorAll('.btn-tier');
   const btnMic = document.getElementById('btn-mic');
   const btnSpeak = document.getElementById('btn-speak');
   const meetInput = document.getElementById('meet-input') as HTMLInputElement | null;
   const btnMeet = document.getElementById('btn-meet');
-  const meetStatus = document.getElementById('meet-status');
-  const personaTitle = document.getElementById('persona-title');
-  const personaBtns = document.querySelectorAll('.btn-persona');
-  const fpsVal = document.getElementById('fps-val');
+  const btnNewMeet = document.getElementById('btn-new-meet');
+  const btnRecenter = document.getElementById('btn-recenter');
 
   let subtitleTimeout: any = null;
 
+  // ─── Modal Open/Close Logic ─────────────────────────────────
+  function openDeck(): void {
+    if (!deckBackdrop) return;
+    deckBackdrop.classList.add('open');
+  }
+
+  function closeDeck(): void {
+    if (!deckBackdrop) return;
+    deckBackdrop.classList.remove('open');
+  }
+
+  function toggleDeck(): void {
+    if (!deckBackdrop) return;
+    if (deckBackdrop.classList.contains('open')) {
+      closeDeck();
+    } else {
+      openDeck();
+    }
+  }
+
+  btnMasterDeck?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleDeck();
+  });
+
+  btnCloseDeck?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeDeck();
+  });
+
+  deckBackdrop?.addEventListener('click', (e) => {
+    if (e.target === deckBackdrop) {
+      closeDeck();
+    }
+  });
+
+  // ─── Subtitles (Auto-fades when idle) ───────────────────────
   function showSubtitle(text: string): void {
     if (!subtitleBox || !subtitleText) return;
     subtitleText.textContent = text;
@@ -39,15 +94,15 @@ function initMatrixFace(): void {
     if (subtitleTimeout) clearTimeout(subtitleTimeout);
     subtitleTimeout = setTimeout(() => {
       subtitleBox.style.opacity = '0';
-      subtitleBox.style.transform = 'translateY(10px)';
-    }, Math.max(3500, text.length * 80));
+      subtitleBox.style.transform = 'translateY(12px)';
+    }, Math.max(3800, text.length * 85));
   }
 
   face.setSubtitleCallback((text) => {
     showSubtitle(text);
   });
 
-  // ─── Real Dynamic FPS Display with Color Cues ────────────────
+  // ─── Real Dynamic FPS Measurement & Indicator ───────────────
   face.setFpsCallback((fps: number) => {
     if (fpsVal) {
       fpsVal.textContent = fps.toString();
@@ -64,8 +119,46 @@ function initMatrixFace(): void {
     }
   });
 
-  // ─── Adaptive 60 FPS Quality Tier Controls ───────────────────
-  const tierBtns = document.querySelectorAll('.btn-tier');
+  // ─── 4D Variant Selector ────────────────────────────────────
+  function selectVariant(variantKey: Eva4DVariant, announce: boolean = true): void {
+    face.setVariant(variantKey);
+
+    variantCards.forEach((card) => {
+      if (card.getAttribute('data-variant') === variantKey) {
+        card.classList.add('active');
+      } else {
+        card.classList.remove('active');
+      }
+    });
+
+    const def = EVA_4D_VARIANTS[variantKey];
+    if (def && activeVariantLabel) {
+      activeVariantLabel.textContent = `EVA 4D // ${def.name}`;
+    }
+
+    if (announce) {
+      const announcements: Record<Eva4DVariant, string> = {
+        phosphor: 'Активировано состояние Люминофор. Классический зеленый код матрицы.',
+        hologram: 'Активирована Векторная Голограмма. Гарантированные 60 кадров в секунду.',
+        electra: 'Активировано состояние Электра. Высоковольтный циановый код.',
+        solar: 'Активировано состояние Солар. Кибернетическое янтарь и золото.',
+        cascade: 'Активирован режим Каскад. Плотный ливень матричного кода.',
+        solid: 'Активирован режим Солид. Высокоточная субпиксельная светотень.',
+        wireframe: 'Активирован Кибер Каркас. Векторная полигональная нейросеть.',
+      };
+      const text = announcements[variantKey] || `Состояние ${variantKey} активировано.`;
+      face.speak(text);
+    }
+  }
+
+  variantCards.forEach((card) => {
+    card.addEventListener('click', () => {
+      const v = card.getAttribute('data-variant') as Eva4DVariant;
+      if (v) selectVariant(v);
+    });
+  });
+
+  // ─── 60 FPS Engine Adaptive Quality Switcher ─────────────────
   tierBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const tier = btn.getAttribute('data-tier') as QualityTier;
@@ -75,11 +168,11 @@ function initMatrixFace(): void {
         btn.classList.add('active');
 
         if (tier === 'eco') {
-          showSubtitle('Режим ECO активирован: векторный голографический градиент (гарантированные 60 FPS).');
+          showSubtitle('Режим ECO активирован: векторные сканлайны без текстурных выборок (строгие 60 FPS).');
         } else if (tier === 'ultra') {
-          showSubtitle('Режим ULTRA активирован: максимальная детализация матричного кода.');
+          showSubtitle('Режим ULTRA активирован: максимальная детализация матричного кода и частицы.');
         } else if (tier === 'balanced') {
-          showSubtitle('Режим BALANCED активирован: оптимальный баланс качества и скорости.');
+          showSubtitle('Режим BALANCED активирован: оптимальный баланс производительности.');
         } else if (tier === 'auto') {
           showSubtitle('Режим AUTO 60 FPS активирован: автоматический watchdog производительности.');
         }
@@ -96,75 +189,46 @@ function initMatrixFace(): void {
     }
   });
 
-  // ─── Multi-Persona Switcher ──────────────────────────────────
-  function selectPersona(personaKey: MatrixPersona, announce: boolean = true): void {
-    face.setPersona(personaKey);
-
-    personaBtns.forEach((b) => {
-      if (b.getAttribute('data-persona') === personaKey) {
-        b.classList.add('active');
-      } else {
-        b.classList.remove('active');
-      }
-    });
-
-    const theme = PERSONA_THEMES[personaKey];
-    if (theme && personaTitle) {
-      personaTitle.textContent = `${theme.title} // 3D CORE`;
-    }
-
-    if (announce) {
-      const names: Record<MatrixPersona, string> = {
-        eva: 'Активирован протокол Ева. Зеленый матричный люминофор.',
-        adam: 'Активирован протокол Адам. Кибернетическое золото и строгие черты.',
-        neo: 'Активирован протокол Нео. Электрический циановый код.',
-        rain: 'Активирован режим Дождь. Чистый поток матричного кода.'
-      };
-      face.speak(names[personaKey]);
-    }
-  }
-
-  personaBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const p = btn.getAttribute('data-persona') as MatrixPersona;
-      if (p) selectPersona(p);
-    });
+  // ─── Recenter Calibration Button ─────────────────────────────
+  btnRecenter?.addEventListener('click', () => {
+    face.recenter();
+    showSubtitle('Голова Евы откалибрована строго по центру экрана.');
   });
 
-  // ─── URL Parameters Support (?persona=adam&tier=eco) ─────────
-  try {
-    const urlParams = new URLSearchParams(window.location.search);
-    const initialPersona = urlParams.get('persona') as MatrixPersona;
-    if (initialPersona && PERSONA_THEMES[initialPersona]) {
-      selectPersona(initialPersona, false);
-    }
-    const initialTier = urlParams.get('tier') as QualityTier;
-    if (initialTier) {
-      const targetBtn = document.querySelector(`.btn-tier[data-tier="${initialTier}"]`) as HTMLElement;
-      if (targetBtn) targetBtn.click();
-    }
-  } catch (_) {}
-
-  // ─── Keyboard Hotkeys (1..4 personas, M mic, S speak) ────────
+  // ─── Keyboard Hotkeys ────────────────────────────────────────
   window.addEventListener('keydown', (e) => {
+    // Ignore hotkeys while user is typing in Google Meet input
     if (e.target === meetInput) return;
 
-    if (e.key === '1') {
-      selectPersona('eva');
-    } else if (e.key === '2') {
-      selectPersona('adam');
-    } else if (e.key === '3') {
-      selectPersona('neo');
-    } else if (e.key === '4') {
-      selectPersona('rain');
-    } else if (e.key === 'm' || e.key === 'ь') {
-      btnMic?.click();
-    } else if (e.key === 's' || e.key === 'ы') {
-      btnSpeak?.click();
+    if (e.key === 'Escape') {
+      closeDeck();
+      return;
+    }
+
+    if (e.key === ' ' || e.key.toLowerCase() === 'm' || e.key.toLowerCase() === 'ь') {
+      // If modal is closed and Space/M pressed, open it.
+      // If modal is open: Space/M toggles it.
+      e.preventDefault();
+      toggleDeck();
+      return;
+    }
+
+    if (e.key === '1') selectVariant('phosphor');
+    else if (e.key === '2') selectVariant('hologram');
+    else if (e.key === '3') selectVariant('electra');
+    else if (e.key === '4') selectVariant('solar');
+    else if (e.key === '5') selectVariant('cascade');
+    else if (e.key === '6') selectVariant('solid');
+    else if (e.key === '7') selectVariant('wireframe');
+    else if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'к') {
+      face.recenter();
+      showSubtitle('Центровка сброшена: голова Евы строго по центру.');
     } else if (e.key.toLowerCase() === 'q' || e.key.toLowerCase() === 'й') {
       const activeIdx = Array.from(tierBtns).findIndex((b) => b.classList.contains('active'));
       const nextIdx = (activeIdx + 1) % tierBtns.length;
       (tierBtns[nextIdx] as HTMLElement).click();
+    } else if (e.key.toLowerCase() === 's' || e.key.toLowerCase() === 'ы') {
+      btnSpeak?.click();
     }
   });
 
@@ -184,11 +248,9 @@ function initMatrixFace(): void {
       if (!transcript) return;
 
       showSubtitle(`Вы: "${transcript}"`);
-
-      // Natural response logic
       setTimeout(() => {
         respondToUser(transcript);
-      }, 700);
+      }, 650);
     };
 
     recognition.onerror = (event: any) => {
@@ -205,15 +267,15 @@ function initMatrixFace(): void {
   function respondToUser(query: string): void {
     const q = query.toLowerCase();
     if (q.includes('кто ты') || q.includes('представься')) {
-      face.speak('Я Ева — цифровая сущность из матричного пространства. Мой облик сформирован из потоков кода, света и теней.');
+      face.speak('Я Ева — универсальная цифровая сущность из матричного пространства. Мой облик сформирован из потоков кода, света и теней.');
     } else if (q.includes('гугл') || q.includes('мит') || q.includes('meet') || q.includes('конференц')) {
-      face.speak('Я готова войти в Google Meet. Введите ссылку на конференцию внизу экрана или нажмите кнопку запуска.');
+      face.speak('Я готова войти в Google Meet. Нажмите кнопку подключения в центре управления.');
     } else if (q.includes('привет') || q.includes('здравствуй')) {
-      face.speak('Приветствую! Матричное ядро активно. Чем могу помочь?');
+      face.speak('Приветствую! Матричное ядро активно на шестидесяти кадрах в секунду. Чем могу помочь?');
     } else if (q.includes('голос') || q.includes('лицо')) {
-      face.speak('Мой облик отрисован в реальном времени через веб-джи-эль шейдер. Лицо плоское по сетке экрана, но живет в полном объеме три-дэ.');
+      face.speak('Мой облик отрисован в реальном времени через веб-джи-эль шейдер. Лицо адаптируется под любое устройство и всегда возвращается в центр.');
     } else {
-      face.speak(`Принято: "${query}". Матричный процессор обрабатывает команду.`);
+      face.speak(`Принято: "${query}". Матричный процессор обрабатывает запрос.`);
     }
   }
 
@@ -232,7 +294,7 @@ function initMatrixFace(): void {
         if (recognition) {
           try { recognition.start(); } catch (_) {}
         }
-        showSubtitle('Микрофон включен. Говорите — лицо реагирует на голос.');
+        showSubtitle('Микрофон включен. Говорите — лицо Евы реагирует на звук.');
       } else {
         alert('Не удалось получить доступ к микрофону.');
       }
@@ -242,7 +304,7 @@ function initMatrixFace(): void {
       const icon = btnMic.querySelector('.mic-icon');
       if (icon) icon.textContent = '🎤';
       const label = btnMic.querySelector('.btn-label');
-      if (label) label.textContent = 'Голос';
+      if (label) label.textContent = 'Микрофон';
 
       if (recognition) {
         try { recognition.stop(); } catch (_) {}
@@ -254,35 +316,25 @@ function initMatrixFace(): void {
   // ─── Speak Button (Ask Eva) ──────────────────────────────────
   btnSpeak?.addEventListener('click', () => {
     const greetings = [
-      'Приветствую. Матричный облик активирован. Я готова к подключению в Google Meet и работе.',
+      'Приветствую. Матричный облик Евы активирован. Я готова к диалогу и трансляции в Google Meet.',
       'На связи Ева. Лицо сформировано из потоков символов, градиентов света и теней.',
-      'Все системы кластера в норме. Готова к диалогу и участию в онлайн-конференциях.'
+      'Все системы кластера в норме. Стабильные 60 FPS и прямое управление активированы.'
     ];
     const phrase = greetings[Math.floor(Math.random() * greetings.length)];
     face.speak(phrase);
   });
 
-  // ─── Google Meet Connector ───────────────────────────────────
-  btnMeet?.addEventListener('click', async () => {
+  // ─── Google Meet Direct Connector ────────────────────────────
+  btnMeet?.addEventListener('click', () => {
     let meetUrl = meetInput?.value.trim() || '';
-
     if (!meetUrl) {
       meetUrl = 'https://meet.google.com/new';
     } else if (!meetUrl.startsWith('http')) {
       meetUrl = `https://meet.google.com/${meetUrl.replace(/^https?:\/\/meet\.google\.com\//, '')}`;
     }
 
-    face.speak('Подключаюсь к сессии Google Meet. Запускаю модуль присутствия.');
+    face.speak('Подключаюсь к Google Meet. Запускаю видеопоток матричного лица.');
 
-    if (meetStatus) {
-      meetStatus.style.display = 'inline-block';
-      meetStatus.textContent = '● ВХОД В GOOGLE MEET...';
-      setTimeout(() => {
-        meetStatus.textContent = '● В СЕССИИ';
-      }, 4000);
-    }
-
-    // Try calling backend launcher daemon or open browser window
     try {
       fetch('/api/meet/launch', {
         method: 'POST',
@@ -291,15 +343,32 @@ function initMatrixFace(): void {
       }).catch(() => {});
     } catch (_) {}
 
-    // Open Google Meet room
     setTimeout(() => {
       window.open(meetUrl, '_blank');
-    }, 1200);
+    }, 1000);
   });
 
-  // Initial welcome greeting after load
+  btnNewMeet?.addEventListener('click', () => {
+    window.open('https://meet.google.com/new', '_blank');
+  });
+
+  // ─── URL Parameters Support (?variant=hologram&tier=eco) ─────
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialVariant = urlParams.get('variant') as Eva4DVariant;
+    if (initialVariant && EVA_4D_VARIANTS[initialVariant]) {
+      selectVariant(initialVariant, false);
+    }
+    const initialTier = urlParams.get('tier') as QualityTier;
+    if (initialTier) {
+      const targetBtn = document.querySelector(`.btn-tier[data-tier="${initialTier}"]`) as HTMLElement;
+      if (targetBtn) targetBtn.click();
+    }
+  } catch (_) {}
+
+  // Welcome greeting
   setTimeout(() => {
-    face.speak('Приветствую! Я Ева. Мой облик воссоздан из матричного кода.');
+    face.speak('Приветствую! Я Ева. Нажмите пробел или кнопку управления для выбора состояния.');
   }, 900);
 }
 

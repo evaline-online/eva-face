@@ -25,6 +25,7 @@ function gauss(dx: number, dy: number, dz: number, sx: number, sy: number, sz: n
 
 export type MatrixPersona = 'eva' | 'adam' | 'neo' | 'rain';
 export type QualityTier = 'auto' | 'ultra' | 'balanced' | 'eco';
+export type Eva4DVariant = 'phosphor' | 'hologram' | 'electra' | 'solar' | 'cascade' | 'solid' | 'wireframe';
 
 export interface PersonaTheme {
   name: MatrixPersona;
@@ -37,6 +38,130 @@ export interface PersonaTheme {
   chinTaper: number;
   browLift: number;
 }
+
+export interface EvaVariantDef {
+  id: Eva4DVariant;
+  name: string;
+  title: string;
+  badge: string;
+  desc: string;
+  primary: THREE.Vector3;
+  highlight: THREE.Vector3;
+  dark: THREE.Vector3;
+  rainSpeed: number;
+  variantMode: number;
+  jawScale: number;
+  chinTaper: number;
+  browLift: number;
+}
+
+export const EVA_4D_VARIANTS: Record<Eva4DVariant, EvaVariantDef> = {
+  phosphor: {
+    id: 'phosphor',
+    name: 'PHOSPHOR',
+    title: 'EVA 4D // PHOSPHOR GREEN',
+    badge: '1',
+    desc: 'Классический зеленый люминофор 520nm, аутентичный поток матрицы',
+    primary: new THREE.Vector3(0.0, 1.0, 0.45),
+    highlight: new THREE.Vector3(1.0, 1.0, 1.0),
+    dark: new THREE.Vector3(0.0, 0.28, 0.08),
+    rainSpeed: 1.0,
+    variantMode: 0.0,
+    jawScale: 0.96,
+    chinTaper: 0.94,
+    browLift: 0.0,
+  },
+  hologram: {
+    id: 'hologram',
+    name: 'HOLOGRAM',
+    title: 'EVA 4D // VECTOR HOLOGRAM',
+    badge: '2',
+    desc: 'Векторные лазерные сканлайны, ультралегкий движок 60 FPS',
+    primary: new THREE.Vector3(0.0, 1.0, 0.75),
+    highlight: new THREE.Vector3(0.85, 1.0, 0.95),
+    dark: new THREE.Vector3(0.0, 0.20, 0.16),
+    rainSpeed: 0.9,
+    variantMode: 1.0,
+    jawScale: 0.96,
+    chinTaper: 0.94,
+    browLift: 0.0,
+  },
+  electra: {
+    id: 'electra',
+    name: 'ELECTRA',
+    title: 'EVA 4D // ELECTRA CYAN',
+    badge: '3',
+    desc: 'Электрический циановый код #00f0ff, сверхновая яркость',
+    primary: new THREE.Vector3(0.0, 0.95, 1.0),
+    highlight: new THREE.Vector3(1.0, 1.0, 1.0),
+    dark: new THREE.Vector3(0.0, 0.14, 0.32),
+    rainSpeed: 1.25,
+    variantMode: 2.0,
+    jawScale: 1.03,
+    chinTaper: 0.98,
+    browLift: 0.01,
+  },
+  solar: {
+    id: 'solar',
+    name: 'SOLAR',
+    title: 'EVA 4D // SOLAR AMBER',
+    badge: '4',
+    desc: 'Кибернетический янтарь и золото #ffb400, глубокие бронзовые тени',
+    primary: new THREE.Vector3(1.0, 0.72, 0.0),
+    highlight: new THREE.Vector3(1.0, 0.96, 0.8),
+    dark: new THREE.Vector3(0.30, 0.15, 0.02),
+    rainSpeed: 0.9,
+    variantMode: 3.0,
+    jawScale: 1.10,
+    chinTaper: 1.04,
+    browLift: 0.02,
+  },
+  cascade: {
+    id: 'cascade',
+    name: 'CASCADE',
+    title: 'EVA 4D // RAIN CASCADE',
+    badge: '5',
+    desc: 'Плотный ливень матричного кода, материализация лица из водопада',
+    primary: new THREE.Vector3(0.1, 1.0, 0.3),
+    highlight: new THREE.Vector3(0.9, 1.0, 0.9),
+    dark: new THREE.Vector3(0.0, 0.18, 0.05),
+    rainSpeed: 1.7,
+    variantMode: 4.0,
+    jawScale: 1.0,
+    chinTaper: 1.0,
+    browLift: 0.0,
+  },
+  solid: {
+    id: 'solid',
+    name: 'SOLID HD',
+    title: 'EVA 4D // SOLID HD BLOCKS',
+    badge: '6',
+    desc: 'Четкие субпиксельные блоки TrueColor, скульптурная объемная светотень',
+    primary: new THREE.Vector3(0.0, 1.0, 0.55),
+    highlight: new THREE.Vector3(1.0, 1.0, 1.0),
+    dark: new THREE.Vector3(0.0, 0.18, 0.06),
+    rainSpeed: 1.1,
+    variantMode: 5.0,
+    jawScale: 0.98,
+    chinTaper: 0.96,
+    browLift: 0.0,
+  },
+  wireframe: {
+    id: 'wireframe',
+    name: 'WIREFRAME',
+    title: 'EVA 4D // CYBER WIREFRAME',
+    badge: '7',
+    desc: 'Цифровой векторный каркас полигональной нейросети',
+    primary: new THREE.Vector3(0.2, 0.85, 1.0),
+    highlight: new THREE.Vector3(1.0, 1.0, 1.0),
+    dark: new THREE.Vector3(0.02, 0.12, 0.22),
+    rainSpeed: 1.1,
+    variantMode: 6.0,
+    jawScale: 0.98,
+    chinTaper: 0.96,
+    browLift: 0.0,
+  },
+};
 
 export const PERSONA_THEMES: Record<MatrixPersona, PersonaTheme> = {
   eva: {
@@ -140,8 +265,9 @@ export class EvaMatrixFace {
   private postMaterial: THREE.ShaderMaterial;
   private glyphTexture: THREE.CanvasTexture;
 
-  // Persona State
+  // Persona & 4D Variant State
   private currentPersona: MatrixPersona = 'eva';
+  private currentVariant: Eva4DVariant = 'phosphor';
 
   // Rotation, Dragging & Elastic Spring-Return Physics
   private isDragging = false;
@@ -367,6 +493,7 @@ export class EvaMatrixFace {
         uDarkColor: { value: theme.dark },
         uRainSpeedMult: { value: theme.rainSpeed },
         uQualityTier: { value: this.activeTierNumber },
+        uVariantMode: { value: 0.0 },
       },
       vertexShader: `
         varying vec2 vUv;
@@ -387,6 +514,7 @@ export class EvaMatrixFace {
         uniform vec3 uDarkColor;
         uniform float uRainSpeedMult;
         uniform float uQualityTier; // 0.0 = Eco, 1.0 = Balanced, 2.0 = Ultra
+        uniform float uVariantMode; // 0=phosphor, 1=hologram, 2=electra, 3=solar, 4=cascade, 5=solid, 6=wireframe
         varying vec2 vUv;
 
         float hash(float n) {
@@ -429,7 +557,7 @@ export class EvaMatrixFace {
             }
           }
 
-          if (uQualityTier > 1.5) {
+          if (uQualityTier > 1.5 || (uVariantMode > 3.5 && uVariantMode < 4.5)) {
             float speed2 = (12.0 + hash(col * 11.3) * 14.0) * uRainSpeedMult;
             float trail2 = 12.0 + hash(col * 41.7) * 16.0;
             float phase2 = hash(col * 29.1) * 220.0;
@@ -441,8 +569,8 @@ export class EvaMatrixFace {
             }
           }
 
-          // ─── TIER 0: ECO GRADIENT HOLOGRAM (GUARANTEED 60 FPS) ───
-          if (uQualityTier < 0.5) {
+          // ─── TIER 0 / HOLOGRAM: VECTOR HOLOGRAPHIC SCANLINES (GUARANTEED 60 FPS) ───
+          if (uQualityTier < 0.5 || (uVariantMode > 0.5 && uVariantMode < 1.5)) {
             vec3 finalColor = vec3(0.0);
             if (isHead) {
               float luma = headData.r;
@@ -477,7 +605,7 @@ export class EvaMatrixFace {
             return;
           }
 
-          // ─── TIER 1 & 2: BALANCED & ULTRA (MATRIX GLYPH ATLAS) ───
+          // ─── TIER 1 & 2: BALANCED & ULTRA (MATRIX GLYPH ATLAS & MODES) ───
           vec2 charUv = fract(pixelCoord / uCellSize);
           float ambientCode = (uQualityTier > 1.5) ? hash2(cellCoord + floor(uTime * 3.5)) * 0.08 : 0.0;
 
@@ -554,7 +682,20 @@ export class EvaMatrixFace {
             (rowIdx + paddedCharUv.y) / 16.0
           );
 
-          float glyphIntensity = texture2D(uGlyphTexture, atlasUv).r;
+          float glyphIntensity = 1.0;
+          if (uVariantMode > 4.5 && uVariantMode < 5.5) {
+            // Solid HD subpixel block mode
+            float border = step(0.06, charUv.x) * step(0.06, charUv.y);
+            glyphIntensity = isHead ? border : (isRainHead ? 1.0 : rainFactor * 0.75);
+          } else if (uVariantMode > 5.5) {
+            // Cyber Wireframe vector contour lines
+            float grid = step(0.86, fract(charUv.x)) + step(0.86, fract(charUv.y));
+            float depthContour = step(0.72, fract(headData.r * 14.0));
+            glyphIntensity = clamp(grid * 0.85 + depthContour * 0.9, 0.15, 1.0);
+          } else {
+            glyphIntensity = texture2D(uGlyphTexture, atlasUv).r;
+          }
+
           vec3 finalColor = charColor * glyphIntensity * alpha;
 
           // Subtle CRT Phosphor Scanlines
@@ -581,9 +722,17 @@ export class EvaMatrixFace {
     this.animate(0);
   }
 
-  // ─── Persona Geometry Morphing ───────────────────────────────
+  // ─── Persona & Variant Geometry Morphing ─────────────────────
   private applyPersonaGeometry(persona: MatrixPersona): void {
     const theme = PERSONA_THEMES[persona];
+    this.applyMorphingFactors(theme.jawScale, theme.chinTaper, theme.browLift);
+  }
+
+  private applyVariantGeometry(def: EvaVariantDef): void {
+    this.applyMorphingFactors(def.jawScale, def.chinTaper, def.browLift);
+  }
+
+  private applyMorphingFactors(jawScale: number, chinTaper: number, browLift: number): void {
     const count = this.vertexCount;
     const raw = this.rawModelPositions;
     const base = this.basePositions;
@@ -595,14 +744,14 @@ export class EvaMatrixFace {
 
       // Morph jaw and chin
       if (py < 0.1) {
-        px *= theme.jawScale;
+        px *= jawScale;
       }
       if (py < -0.15) {
-        px *= theme.chinTaper;
+        px *= chinTaper;
       }
       // Morph brow
       if (py > 0.38 && py < 0.50 && pz > 0.26) {
-        pz += theme.browLift;
+        pz += browLift;
       }
 
       base[i * 3] = px;
@@ -611,18 +760,57 @@ export class EvaMatrixFace {
     }
   }
 
-  public setPersona(persona: MatrixPersona): void {
-    this.currentPersona = persona;
-    const theme = PERSONA_THEMES[persona];
+  public setVariant(variant: Eva4DVariant): void {
+    this.currentVariant = variant;
+    const def = EVA_4D_VARIANTS[variant];
+    if (!def) return;
 
-    this.applyPersonaGeometry(persona);
+    this.applyVariantGeometry(def);
 
     if (this.postMaterial) {
-      this.postMaterial.uniforms.uPrimaryColor.value = theme.primary;
-      this.postMaterial.uniforms.uHighlightColor.value = theme.highlight;
-      this.postMaterial.uniforms.uDarkColor.value = theme.dark;
-      this.postMaterial.uniforms.uRainSpeedMult.value = theme.rainSpeed;
+      this.postMaterial.uniforms.uPrimaryColor.value = def.primary;
+      this.postMaterial.uniforms.uHighlightColor.value = def.highlight;
+      this.postMaterial.uniforms.uDarkColor.value = def.dark;
+      this.postMaterial.uniforms.uRainSpeedMult.value = def.rainSpeed;
+      this.postMaterial.uniforms.uVariantMode.value = def.variantMode;
+
+      if (variant === 'hologram') {
+        this.postMaterial.uniforms.uQualityTier.value = 0.0;
+      } else if (this.qualityMode === 'eco') {
+        this.postMaterial.uniforms.uQualityTier.value = 0.0;
+      } else if (this.qualityMode === 'balanced') {
+        this.postMaterial.uniforms.uQualityTier.value = 1.0;
+      } else {
+        this.postMaterial.uniforms.uQualityTier.value = this.activeTierNumber;
+      }
     }
+  }
+
+  public getVariant(): Eva4DVariant {
+    return this.currentVariant;
+  }
+
+  public recenter(): void {
+    this.dragRotX = 0;
+    this.dragRotY = 0;
+    this.hoverRotX = 0;
+    this.hoverRotY = 0;
+    this.currentRotX = 0;
+    this.currentRotY = 0;
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.updateCameraFraming();
+  }
+
+  public setPersona(persona: MatrixPersona): void {
+    this.currentPersona = persona;
+    const map: Record<MatrixPersona, Eva4DVariant> = {
+      eva: 'phosphor',
+      adam: 'solar',
+      neo: 'electra',
+      rain: 'cascade',
+    };
+    this.setVariant(map[persona] || 'phosphor');
   }
 
   // ─── Mathematical Centering Across All Devices ───────────────

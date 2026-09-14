@@ -49,69 +49,112 @@ function disableRawMode() {
   showCursor();
 }
 
-// ─── Personas & Palette ────────────────────────────────────────
+// ─── Eva 4D Variants & Palette ──────────────────────────────────
 
-type TermPersona = 'eva' | 'adam' | 'neo' | 'rain';
-let currentPersona: TermPersona = 'eva';
+export type TermVariant = 'phosphor' | 'hologram' | 'electra' | 'solar' | 'cascade' | 'solid' | 'wireframe';
+let currentVariant: TermVariant = 'phosphor';
+let showMenuOverlay = false;
 
-interface PersonaPalette {
+export interface VariantPalette {
+  id: TermVariant;
   name: string;
   primary: [number, number, number];
   highlight: [number, number, number];
   dark: [number, number, number];
   rain: [number, number, number];
+  rainSpeed: number;
 }
 
-const PALETTES: Record<TermPersona, PersonaPalette> = {
-  eva: {
-    name: 'EVA (MATRIX PHOSPHOR)',
+export const VARIANT_PALETTES: Record<TermVariant, VariantPalette> = {
+  phosphor: {
+    id: 'phosphor',
+    name: 'EVA 4D (PHOSPHOR GREEN)',
     primary: [0, 255, 102],
     highlight: [255, 255, 255],
     dark: [0, 42, 12],
     rain: [0, 230, 80],
+    rainSpeed: 1.0,
   },
-  adam: {
-    name: 'ADAM (CYBER AMBER)',
-    primary: [255, 180, 0],
-    highlight: [255, 245, 220],
-    dark: [45, 20, 2],
-    rain: [255, 160, 10],
+  hologram: {
+    id: 'hologram',
+    name: 'EVA 4D (VECTOR HOLOGRAM 60FPS)',
+    primary: [0, 255, 190],
+    highlight: [220, 255, 245],
+    dark: [0, 35, 28],
+    rain: [0, 210, 160],
+    rainSpeed: 0.9,
   },
-  neo: {
-    name: 'NEO (ELECTRA CYAN)',
+  electra: {
+    id: 'electra',
+    name: 'EVA 4D (ELECTRA CYAN)',
     primary: [0, 240, 255],
     highlight: [255, 255, 255],
     dark: [0, 25, 50],
     rain: [0, 210, 255],
+    rainSpeed: 1.25,
   },
-  rain: {
-    name: 'RAIN (PURE MATRIX CODE)',
+  solar: {
+    id: 'solar',
+    name: 'EVA 4D (SOLAR AMBER)',
+    primary: [255, 180, 0],
+    highlight: [255, 245, 220],
+    dark: [45, 20, 2],
+    rain: [255, 160, 10],
+    rainSpeed: 0.9,
+  },
+  cascade: {
+    id: 'cascade',
+    name: 'EVA 4D (RAIN CASCADE)',
     primary: [16, 255, 64],
     highlight: [230, 255, 235],
     dark: [0, 30, 6],
     rain: [50, 255, 120],
+    rainSpeed: 1.8,
+  },
+  solid: {
+    id: 'solid',
+    name: 'EVA 4D (SOLID HD BLOCKS)',
+    primary: [0, 255, 140],
+    highlight: [255, 255, 255],
+    dark: [0, 35, 15],
+    rain: [0, 220, 90],
+    rainSpeed: 1.1,
+  },
+  wireframe: {
+    id: 'wireframe',
+    name: 'EVA 4D (CYBER WIREFRAME)',
+    primary: [60, 210, 255],
+    highlight: [255, 255, 255],
+    dark: [5, 25, 45],
+    rain: [40, 180, 240],
+    rainSpeed: 1.1,
   },
 };
 
+// Aliases for backwards compatibility
+const PALETTES = VARIANT_PALETTES;
+type TermPersona = TermVariant;
+let currentPersona: TermVariant = currentVariant;
+
 // ─── Render Modes ──────────────────────────────────────────────
 
-type VisualMode = 'matrix' | 'solid';
+type VisualMode = 'matrix' | 'solid' | 'wireframe';
 let visualMode: VisualMode = 'matrix'; // default Matrix Code
 
-// Parse CLI flags for direct station launch (e.g. ./eva-face.sh adam / npx tsx src/terminal.ts neo)
+// Parse CLI flags for direct launch
 for (const arg of process.argv.slice(2)) {
   const clean = arg.toLowerCase().replace(/^--?/, '');
-  if (clean === 'eva' || clean.includes('persona=eva')) currentPersona = 'eva';
-  else if (clean === 'adam' || clean.includes('persona=adam')) currentPersona = 'adam';
-  else if (clean === 'neo' || clean.includes('persona=neo')) currentPersona = 'neo';
-  else if (clean === 'rain' || clean.includes('persona=rain')) currentPersona = 'rain';
-  else if (clean === 'solid' || clean.includes('mode=solid') || clean === 'hd') visualMode = 'solid';
-  else if (clean === 'matrix' || clean.includes('mode=matrix')) visualMode = 'matrix';
+  if (clean === 'phosphor' || clean === 'eva') currentVariant = 'phosphor';
+  else if (clean === 'hologram' || clean === 'eco') currentVariant = 'hologram';
+  else if (clean === 'electra' || clean === 'neo') currentVariant = 'electra';
+  else if (clean === 'solar' || clean === 'adam') currentVariant = 'solar';
+  else if (clean === 'cascade' || clean === 'rain') currentVariant = 'cascade';
+  else if (clean === 'solid' || clean === 'hd') { currentVariant = 'solid'; visualMode = 'solid'; }
+  else if (clean === 'wireframe' || clean === 'wire') { currentVariant = 'wireframe'; visualMode = 'wireframe'; }
 }
 
-// Strictly single-width (wcwidth=1) Matrix Katakana & code glyph ramp
-// Prevents terminal column misalignments caused by fullwidth CJK characters!
 const MATRIX_RAMP = '  .:-=+10AZXﾊﾐﾋｳｼﾅﾓﾆｻﾜﾂｵ#%@';
+const WIREFRAME_RAMP = '  ..::--==++//\\\\||##@@';
 
 // ─── Interactive State & Spring Physics ─────────────────────────
 
@@ -195,16 +238,27 @@ function handleInput(data: Buffer) {
     clearScreen();
     process.exit(0);
   }
-  if (str === '1') { currentPersona = 'eva'; }
-  else if (str === '2') { currentPersona = 'adam'; }
-  else if (str === '3') { currentPersona = 'neo'; }
-  else if (str === '4') { currentPersona = 'rain'; }
+  if (str === ' ' || str.toLowerCase() === 'm' || str.toLowerCase() === 'ь') {
+    showMenuOverlay = !showMenuOverlay;
+    prevCells = null;
+    clearScreen();
+    return;
+  }
+  if (str === '1') { currentVariant = 'phosphor'; currentPersona = 'phosphor'; visualMode = 'matrix'; }
+  else if (str === '2') { currentVariant = 'hologram'; currentPersona = 'hologram'; visualMode = 'matrix'; }
+  else if (str === '3') { currentVariant = 'electra'; currentPersona = 'electra'; visualMode = 'matrix'; }
+  else if (str === '4') { currentVariant = 'solar'; currentPersona = 'solar'; visualMode = 'matrix'; }
+  else if (str === '5') { currentVariant = 'cascade'; currentPersona = 'cascade'; visualMode = 'matrix'; }
+  else if (str === '6') { currentVariant = 'solid'; currentPersona = 'solid'; visualMode = 'solid'; prevCells = null; clearScreen(); }
+  else if (str === '7') { currentVariant = 'wireframe'; currentPersona = 'wireframe'; visualMode = 'wireframe'; prevCells = null; clearScreen(); }
   else if (str.toLowerCase() === 'v' || str === '\t') {
-    visualMode = visualMode === 'matrix' ? 'solid' : 'matrix';
+    if (visualMode === 'matrix') visualMode = 'solid';
+    else if (visualMode === 'solid') visualMode = 'wireframe';
+    else visualMode = 'matrix';
     prevCells = null;
     clearScreen();
   }
-  else if (str.toLowerCase() === 'r') {
+  else if (str.toLowerCase() === 'r' || str.toLowerCase() === 'к') {
     rotX = 0; rotY = 0; dragRotX = 0; dragRotY = 0; mouseX = 0; mouseY = 0;
   }
 
@@ -591,8 +645,9 @@ function renderFrame() {
           const inten = Math.max(0, Math.min(1, 0.08 + 0.70 * dot + 0.18 * fill + 0.32 * spec));
 
           // Character index
-          const charIdx = Math.floor(inten * (MATRIX_RAMP.length - 1));
-          const char = MATRIX_RAMP[charIdx];
+          const ramp = visualMode === 'wireframe' ? WIREFRAME_RAMP : MATRIX_RAMP;
+          const charIdx = Math.floor(inten * (ramp.length - 1));
+          const char = ramp[charIdx];
 
           // 24-bit TrueColor
           let r = 0, g = 0, b = 0;
@@ -637,19 +692,53 @@ function renderFrame() {
   cpuMsAvg = cpuMsAvg * 0.9 + cpuMs * 0.1;
   const fps = 1000 / Math.max(dtMsAvg, 0.01);
 
-  const modeTag = visualMode === 'matrix' ? 'MATRIX CODE' : 'HD SOLID';
-  const title = ` 🟢 ${palette.name} · ${modeTag} · ${fps.toFixed(0)} FPS (${cpuMsAvg.toFixed(1)}ms) `;
+  const modeTag = visualMode.toUpperCase();
+  const title = ` 🟢 ${palette.name} · ${modeTag} · ${fps.toFixed(0)} FPS (${cpuMsAvg.toFixed(1)}ms) · [m] МЕНЮ `;
   const titleX = Math.max(0, Math.floor((termW - title.length) / 2));
   for (let k = 0; k < title.length && titleX + k < termW; k++) {
     curCells[titleX + k] = `\x1b[38;2;${palette.primary[0]};${palette.primary[1]};${palette.primary[2]};1m${title[k]}`;
   }
 
   if (termH > 1) {
-    const hint = ' Keys: [1..4] Personas | [v/tab] Matrix/HD Mode | Mouse: Gaze & Drag-Rotate | [r] Center | [q] Quit ';
+    const hint = ' Keys: [m] Центр Управления | [1..7] 4D Облики | [v] Режим | [r] Центр | [q] Выход ';
     const hintX = Math.max(0, Math.floor((termW - hint.length) / 2));
     const base = (termH - 1) * termW;
     for (let k = 0; k < hint.length && hintX + k < termW; k++) {
       curCells[base + hintX + k] = `\x1b[38;2;0;160;70m${hint[k]}`;
+    }
+  }
+
+  // Overlay Menu Box
+  if (showMenuOverlay && termH >= 14 && termW >= 58) {
+    const lines = [
+      '┌────────────────────────────────────────────────────────┐',
+      '│  ⚡ EVA 4D MASTER CONTROL DECK // ТЕРМИНАЛ             │',
+      '├────────────────────────────────────────────────────────┤',
+      '│  [1] Phosphor Green       [2] Vector Hologram (Eco)    │',
+      '│  [3] Electra Cyan         [4] Solar Amber              │',
+      '│  [5] Rain Cascade         [6] Solid HD Blocks (▀)      │',
+      '│  [7] Cyber Wireframe      [v] Режим: ' + visualMode.toUpperCase().padEnd(18) + '│',
+      '│  [r] Центрировать         [q] Выход                    │',
+      '│                                                        │',
+      '│  Мышь: Взгляд и вращение (пружинный возврат в центр)   │',
+      '│  Нажмите [m] или [пробел] чтобы скрыть это меню        │',
+      '└────────────────────────────────────────────────────────┘',
+    ];
+    const boxW = 58;
+    const startX = Math.max(0, Math.floor((termW - boxW) / 2));
+    const startY = Math.max(1, Math.floor((termH - lines.length) / 2));
+
+    for (let l = 0; l < lines.length; l++) {
+      const row = startY + l;
+      if (row >= termH) break;
+      const lineStr = lines[l];
+      for (let c = 0; c < lineStr.length && startX + c < termW; c++) {
+        const char = lineStr[c];
+        const cellIdx = row * termW + (startX + c);
+        const isHeader = l <= 1;
+        const color = isHeader ? '\x1b[38;2;0;255;102;48;2;2;14;6;1m' : '\x1b[38;2;220;255;235;48;2;1;18;8m';
+        curCells[cellIdx] = `${color}${char}\x1b[0m`;
+      }
     }
   }
 
