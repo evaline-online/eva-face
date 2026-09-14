@@ -8,15 +8,24 @@
     "dev:terminal": "npx tsx src/terminal.ts",
     "dev:multihead": "npx tsx src/multihead_terminal.ts",
     "build:browser": "npx esbuild src/browser.ts --bundle --outfile=dist/face.js --format=iife --platform=browser --minify",
+    "build:bridge": "npx esbuild src/bridge.ts --bundle --outfile=dist/bridge.js --platform=node --format=esm --packages=external",
     "build:terminal": "tsc",
+    "bridge": "node dist/bridge.js",
+    "build": "npm run build:browser && npm run build:bridge && npm run build:terminal",
     "start": "npx tsx src/terminal.ts",
     "test:face": "tsx tools/test_face.ts",
     "preview:all": "tsx tools/preview_all.ts"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.23.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@types/three": "^0.186.0",
+    "three": "^0.186.0",
+    "ws": "^8.21.3"
   }
 }

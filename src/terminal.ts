@@ -15,9 +15,57 @@
 
 import { HEAD_POS, HEAD_NRM, HEAD_TRI, HEAD_N, HEAD_TRI_COUNT } from './headmodel.js';
 import { detectMode, ansiSet, type RenderMode } from './capability.js';
+import { WebSocket } from 'ws';
 
 const stdout = process.stdout;
 const stdin = process.stdin;
+
+// ─── Real-Time WebSocket Bridge Synchronization ────────────────
+let wsBridge: WebSocket | null = null;
+const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '8094', 10);
+
+function sendBridge(msg: any) {
+  if (wsBridge && wsBridge.readyState === WebSocket.OPEN) {
+    try {
+      wsBridge.send(JSON.stringify(msg));
+    } catch (_) {}
+  }
+}
+
+function initBridge() {
+  try {
+    const ws = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}`);
+    ws.on('open', () => {
+      wsBridge = ws;
+    });
+    ws.on('message', (data: Buffer) => {
+      try {
+        const msg = JSON.parse(data.toString('utf8'));
+        if (msg.type === 'variant' && msg.variant && VARIANT_PALETTES[msg.variant as TermVariant]) {
+          currentVariant = msg.variant as TermVariant;
+          currentPersona = currentVariant;
+          if (msg.variant === 'solid') visualMode = 'solid';
+          else if (msg.variant === 'wireframe') visualMode = 'wireframe';
+          else visualMode = 'matrix';
+          prevCells = null;
+        } else if (msg.type === 'recenter') {
+          rotX = 0; rotY = 0; dragRotX = 0; dragRotY = 0; mouseX = 0; mouseY = 0;
+        } else if (msg.type === 'gaze' && typeof msg.x === 'number' && typeof msg.y === 'number') {
+          mouseX = Math.max(-1.5, Math.min(1.5, msg.x));
+          mouseY = Math.max(-1.5, Math.min(1.5, msg.y));
+          hasInteracted = true;
+        }
+      } catch (_) {}
+    });
+    ws.on('error', () => {});
+    ws.on('close', () => {
+      wsBridge = null;
+      setTimeout(initBridge, 3500);
+    });
+  } catch (_) {
+    setTimeout(initBridge, 5000);
+  }
+}
 
 function getTermSize(): [number, number] {
   const cols = stdout.columns || 90;
@@ -244,22 +292,24 @@ function handleInput(data: Buffer) {
     clearScreen();
     return;
   }
-  if (str === '1') { currentVariant = 'phosphor'; currentPersona = 'phosphor'; visualMode = 'matrix'; }
-  else if (str === '2') { currentVariant = 'hologram'; currentPersona = 'hologram'; visualMode = 'matrix'; }
-  else if (str === '3') { currentVariant = 'electra'; currentPersona = 'electra'; visualMode = 'matrix'; }
-  else if (str === '4') { currentVariant = 'solar'; currentPersona = 'solar'; visualMode = 'matrix'; }
-  else if (str === '5') { currentVariant = 'cascade'; currentPersona = 'cascade'; visualMode = 'matrix'; }
-  else if (str === '6') { currentVariant = 'solid'; currentPersona = 'solid'; visualMode = 'solid'; prevCells = null; clearScreen(); }
-  else if (str === '7') { currentVariant = 'wireframe'; currentPersona = 'wireframe'; visualMode = 'wireframe'; prevCells = null; clearScreen(); }
+  if (str === '1') { currentVariant = 'phosphor'; currentPersona = 'phosphor'; visualMode = 'matrix'; sendBridge({ type: 'variant', variant: 'phosphor' }); }
+  else if (str === '2') { currentVariant = 'hologram'; currentPersona = 'hologram'; visualMode = 'matrix'; sendBridge({ type: 'variant', variant: 'hologram' }); }
+  else if (str === '3') { currentVariant = 'electra'; currentPersona = 'electra'; visualMode = 'matrix'; sendBridge({ type: 'variant', variant: 'electra' }); }
+  else if (str === '4') { currentVariant = 'solar'; currentPersona = 'solar'; visualMode = 'matrix'; sendBridge({ type: 'variant', variant: 'solar' }); }
+  else if (str === '5') { currentVariant = 'cascade'; currentPersona = 'cascade'; visualMode = 'matrix'; sendBridge({ type: 'variant', variant: 'cascade' }); }
+  else if (str === '6') { currentVariant = 'solid'; currentPersona = 'solid'; visualMode = 'solid'; prevCells = null; clearScreen(); sendBridge({ type: 'variant', variant: 'solid' }); }
+  else if (str === '7') { currentVariant = 'wireframe'; currentPersona = 'wireframe'; visualMode = 'wireframe'; prevCells = null; clearScreen(); sendBridge({ type: 'variant', variant: 'wireframe' }); }
   else if (str.toLowerCase() === 'v' || str === '\t') {
     if (visualMode === 'matrix') visualMode = 'solid';
     else if (visualMode === 'solid') visualMode = 'wireframe';
     else visualMode = 'matrix';
     prevCells = null;
     clearScreen();
+    sendBridge({ type: 'variant', variant: currentVariant });
   }
   else if (str.toLowerCase() === 'r' || str.toLowerCase() === 'к') {
     rotX = 0; rotY = 0; dragRotX = 0; dragRotY = 0; mouseX = 0; mouseY = 0;
+    sendBridge({ type: 'recenter' });
   }
 
   inputBuffer += str;
@@ -794,11 +844,15 @@ process.on('SIGTERM', () => {
 
 process.on('exit', () => {
   disableRawMode();
+  if (wsBridge) {
+    try { wsBridge.close(); } catch (_) {}
+  }
 });
 
 // Startup
 [termW, termH] = getTermSize();
 initRain(termW);
+initBridge();
 hideCursor();
 enableRawMode();
 clearScreen();

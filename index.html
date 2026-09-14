@@ -575,11 +575,82 @@
     .deck-split-row { grid-template-columns: 1fr; }
     .variants-grid { grid-template-columns: 1fr; }
   }
+
+  /* ─── Holographic Webcam PIP (Bottom Right Corner) ─── */
+  .cam-pip-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 144px;
+    height: 108px;
+    border: 1px solid var(--matrix-green);
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 10, 4, 0.90);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 24px rgba(0, 255, 102, 0.35);
+    backdrop-filter: blur(12px);
+    z-index: 40;
+    pointer-events: none;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cam-pip-container.hidden {
+    opacity: 0;
+    transform: scale(0.7) translateY(20px);
+    pointer-events: none;
+  }
+
+  .cam-pip-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    filter: grayscale(100%) contrast(140%) brightness(85%);
+  }
+
+  .cam-pip-header {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    right: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--matrix-green);
+    text-shadow: 0 0 6px rgba(0, 255, 102, 0.8);
+    pointer-events: none;
+  }
+
+  .cam-pip-crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    border: 1px dashed rgba(0, 255, 102, 0.7);
+    border-radius: 50%;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 
 <div id="canvas-container"></div>
+
+<!-- Holographic Webcam PIP View (Bottom-Right, Hidden by Default) -->
+<div id="cam-pip-container" class="cam-pip-container hidden">
+  <video id="webcam-video" autoplay playsinline muted></video>
+  <div class="cam-pip-header">
+    <span>● MIRROR CAM</span>
+    <span id="cam-status">ACTIVE</span>
+  </div>
+  <div class="cam-pip-crosshair"></div>
+</div>
 
 <!-- Ultra-Minimal Viewport HUD: Zero Clutter, Exactly 1 Master Pill -->
 <div class="viewport-hud">
@@ -703,20 +774,24 @@
       <div class="voice-controls">
         <div class="deck-section-title">
           <span>🎤</span>
-          <span>Голос & Диалог (Клавиши [M] / [S])</span>
+          <span>Голос & Камера (Клавиши [M] / [S] / [C])</span>
         </div>
         <div class="voice-btn-group">
-          <button id="btn-mic" class="btn-deck-action">
+          <button id="btn-mic" class="btn-deck-action" title="Голосовой ввод [M]">
             <span class="mic-icon">🎤</span>
             <span class="btn-label">Микрофон</span>
           </button>
-          <button id="btn-speak" class="btn-deck-action">
+          <button id="btn-speak" class="btn-deck-action" title="Спросить Еву [S]">
             <span>🔊</span>
-            <span>Спросить Еву</span>
+            <span class="btn-label">Спросить</span>
+          </button>
+          <button id="btn-cam" class="btn-deck-action" title="Слежение за лицом через камеру (Mirror Mode) [C]">
+            <span class="cam-icon">📹</span>
+            <span class="btn-label">Камера</span>
           </button>
         </div>
         <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6);">
-          Лицо Евы анимирует губы и свечение в такт голосу через Web Audio FFT.
+          Лицо Евы анимирует губы в такт звуку и зеркалит движения головы через камеру.
         </div>
       </div>
 
@@ -748,7 +823,7 @@
         <button id="btn-sfx" class="btn-recenter" title="Кибернетические звуковые эффекты">🔊 FX: ВКЛ</button>
       </div>
       <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
-        <span><b>[Пробел/M]</b> меню · <b>[1..7]</b> 4D облик · <b>[Q]</b> 60 FPS · <b>[R]</b> центр · <b>[F]</b> экран</span>
+        <span><b>[Пробел/M]</b> меню · <b>[1..7]</b> 4D облик · <b>[C]</b> камера · <b>[Q]</b> 60 FPS · <b>[R]</b> центр · <b>[F]</b> экран</span>
         <a href="stations/" class="stations-link">🗂️ Станции</a>
       </div>
     </div>

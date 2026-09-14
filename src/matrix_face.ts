@@ -802,6 +802,25 @@ export class EvaMatrixFace {
     this.updateCameraFraming();
   }
 
+  public setGaze(x: number, y: number): void {
+    this.mouseX = Math.max(-1.5, Math.min(1.5, x));
+    this.mouseY = Math.max(-1.5, Math.min(1.5, y));
+  }
+
+  public getGaze(): { x: number; y: number; rotX: number; rotY: number } {
+    return {
+      x: this.mouseX,
+      y: this.mouseY,
+      rotX: this.currentRotX,
+      rotY: this.currentRotY,
+    };
+  }
+
+  public setHeadRotation(rotX: number, rotY: number): void {
+    this.dragRotX = rotX;
+    this.dragRotY = rotY;
+  }
+
   public setPersona(persona: MatrixPersona): void {
     this.currentPersona = persona;
     const map: Record<MatrixPersona, Eva4DVariant> = {

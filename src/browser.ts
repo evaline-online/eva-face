@@ -93,6 +93,227 @@ class MatrixAudioFx {
   }
 }
 
+// ─── Real-Time WebSocket Bridge (Terminal ↔ Web Sync) ─────────
+class MatrixBridgeClient {
+  private ws: WebSocket | null = null;
+  private url: string;
+  private reconnectTimer: any = null;
+  private onMessageCallback: (msg: any) => void;
+
+  constructor(onMessage: (msg: any) => void) {
+    this.onMessageCallback = onMessage;
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const host = (typeof window !== 'undefined' && window.location.hostname) || '127.0.0.1';
+    if (isHttps) {
+      this.url = `wss://${window.location.host}/face-ws`;
+    } else {
+      this.url = `ws://${host}:8094`;
+    }
+    this.connect();
+  }
+
+  private connect(): void {
+    try {
+      this.ws = new WebSocket(this.url);
+      this.ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          this.onMessageCallback(msg);
+        } catch (_) {}
+      };
+      this.ws.onopen = () => {
+        console.log('[Eva Bridge] Synchronized with bridge at', this.url);
+      };
+      this.ws.onclose = () => {
+        this.ws = null;
+        if (!this.reconnectTimer) {
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.connect();
+          }, 3500);
+        }
+      };
+      this.ws.onerror = () => {};
+    } catch (_) {
+      if (!this.reconnectTimer) {
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = null;
+          this.connect();
+        }, 5000);
+      }
+    }
+  }
+
+  public send(msg: any): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify(msg));
+      } catch (_) {}
+    }
+  }
+}
+
+// ─── Webcam Face & Head Tracking (Mirror Mode) ────────────────
+class WebcamFaceTracker {
+  private video: HTMLVideoElement | null = null;
+  private pipContainer: HTMLElement | null = null;
+  private camStatus: HTMLElement | null = null;
+  private stream: MediaStream | null = null;
+  private isTracking: boolean = false;
+  private animId: number | null = null;
+  private offCanvas: HTMLCanvasElement;
+  private offCtx: CanvasRenderingContext2D | null;
+  private faceDetector: any = null;
+  private smoothedX: number = 0;
+  private smoothedY: number = 0;
+  private lastProcessTime: number = 0;
+  private onGazeCallback: (x: number, y: number) => void;
+
+  constructor(onGaze: (x: number, y: number) => void) {
+    this.onGazeCallback = onGaze;
+    this.video = document.getElementById('webcam-video') as HTMLVideoElement | null;
+    this.pipContainer = document.getElementById('cam-pip-container');
+    this.camStatus = document.getElementById('cam-status');
+    this.offCanvas = document.createElement('canvas');
+    this.offCanvas.width = 64;
+    this.offCanvas.height = 48;
+    this.offCtx = this.offCanvas.getContext('2d', { willReadFrequently: true });
+
+    if (typeof (window as any).FaceDetector !== 'undefined') {
+      try {
+        this.faceDetector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      } catch (_) {}
+    }
+  }
+
+  public get active(): boolean {
+    return this.isTracking;
+  }
+
+  public async start(): Promise<boolean> {
+    if (this.isTracking) return true;
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+          facingMode: 'user',
+        },
+        audio: false,
+      });
+
+      if (this.video) {
+        this.video.srcObject = this.stream;
+        await this.video.play();
+      }
+
+      if (this.pipContainer) {
+        this.pipContainer.classList.remove('hidden');
+      }
+
+      this.isTracking = true;
+      this.processLoop();
+      return true;
+    } catch (err) {
+      console.warn('[Eva Cam] Could not access webcam:', err);
+      return false;
+    }
+  }
+
+  public stop(): void {
+    if (!this.isTracking) return;
+    this.isTracking = false;
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => track.stop());
+      this.stream = null;
+    }
+    if (this.video) {
+      this.video.srcObject = null;
+    }
+    if (this.pipContainer) {
+      this.pipContainer.classList.add('hidden');
+    }
+    this.smoothedX = 0;
+    this.smoothedY = 0;
+    this.onGazeCallback(0, 0);
+  }
+
+  private processLoop = async () => {
+    if (!this.isTracking) return;
+
+    const now = performance.now();
+    // Maintain 60 FPS in WebGL: limit image processing to 25Hz
+    if (now - this.lastProcessTime >= 38 && this.video && this.video.readyState >= 2) {
+      this.lastProcessTime = now;
+      let detectedTarget: { x: number; y: number } | null = null;
+
+      // 1. Hardware FaceDetector API if available
+      if (this.faceDetector) {
+        try {
+          const faces = await this.faceDetector.detect(this.video);
+          if (faces && faces.length > 0) {
+            const b = faces[0].boundingBox;
+            const cx = (b.x + b.width * 0.5) / this.video.videoWidth;
+            const cy = (b.y + b.height * 0.5) / this.video.videoHeight;
+            // Mirror coordinate mapping
+            detectedTarget = {
+              x: (0.5 - cx) * 2.5,
+              y: (cy - 0.45) * 2.2,
+            };
+          }
+        } catch (_) {}
+      }
+
+      // 2. High-speed luminance & face centroid fallback (64x48)
+      if (!detectedTarget && this.offCtx) {
+        try {
+          this.offCtx.drawImage(this.video, 0, 0, 64, 48);
+          const imgData = this.offCtx.getImageData(0, 0, 64, 48);
+          const data = imgData.data;
+          let sumX = 0, sumY = 0, count = 0;
+
+          for (let y = 4; y < 44; y += 2) {
+            for (let x = 6; x < 58; x += 2) {
+              const idx = (y * 64 + x) * 4;
+              const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+              if (lum > 50 && lum < 220) {
+                sumX += x;
+                sumY += y;
+                count++;
+              }
+            }
+          }
+
+          if (count > 20) {
+            const avgX = sumX / count;
+            const avgY = sumY / count;
+            const normX = ((32 - avgX) / 24) * 1.8;
+            const normY = ((avgY - 24) / 18) * 1.5;
+            detectedTarget = { x: normX, y: normY };
+          }
+        } catch (_) {}
+      }
+
+      if (detectedTarget) {
+        const alpha = 0.22;
+        this.smoothedX += (detectedTarget.x - this.smoothedX) * alpha;
+        this.smoothedY += (detectedTarget.y - this.smoothedY) * alpha;
+        this.onGazeCallback(this.smoothedX, this.smoothedY);
+        if (this.camStatus) this.camStatus.textContent = 'TRACKING';
+      } else {
+        if (this.camStatus) this.camStatus.textContent = 'SEARCHING';
+      }
+    }
+
+    this.animId = requestAnimationFrame(this.processLoop);
+  };
+}
+
 function initMatrixFace(): void {
   const container = document.getElementById('canvas-container');
   if (!container) return;
@@ -115,6 +336,7 @@ function initMatrixFace(): void {
   const tierBtns = document.querySelectorAll('.btn-tier');
   const btnMic = document.getElementById('btn-mic');
   const btnSpeak = document.getElementById('btn-speak');
+  const btnCam = document.getElementById('btn-cam');
   const meetInput = document.getElementById('meet-input') as HTMLInputElement | null;
   const btnMeet = document.getElementById('btn-meet');
   const btnNewMeet = document.getElementById('btn-new-meet');
@@ -123,6 +345,52 @@ function initMatrixFace(): void {
   const btnSfx = document.getElementById('btn-sfx');
 
   let subtitleTimeout: any = null;
+
+  // ─── Webcam Head Tracking & Mirror Mode ─────────────────────
+  const camTracker = new WebcamFaceTracker((x, y) => {
+    face.setGaze(x, y);
+    bridge.send({ type: 'gaze', x, y });
+  });
+
+  async function toggleCamera(): Promise<void> {
+    if (!camTracker.active) {
+      const ok = await camTracker.start();
+      if (ok) {
+        btnCam?.classList.add('active');
+        sfx.playChirp(880);
+        showSubtitle('📹 Камера активна: Ева зеркалит ваши движения головы (Mirror Mode).');
+      } else {
+        showSubtitle('⚠️ Доступ к веб-камере не разрешен или камера занята.');
+      }
+    } else {
+      camTracker.stop();
+      btnCam?.classList.remove('active');
+      sfx.playChirp(600);
+      showSubtitle('📹 Слежение через камеру отключено.');
+    }
+  }
+
+  btnCam?.addEventListener('click', toggleCamera);
+
+  // ─── Real-Time WebSocket Bridge Connection ──────────────────
+  const bridge = new MatrixBridgeClient((msg) => {
+    if (msg.type === 'variant' && msg.variant && EVA_4D_VARIANTS[msg.variant as Eva4DVariant]) {
+      selectVariant(msg.variant as Eva4DVariant, false, false);
+      showSubtitle(`Терминал ↔ Веб: синхронизирован облик ${msg.variant.toUpperCase()}`);
+    } else if (msg.type === 'tier' && msg.tier) {
+      face.setQualityTier(msg.tier);
+      tierBtns.forEach((b) => {
+        if (b.getAttribute('data-tier') === msg.tier) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      showSubtitle(`Терминал ↔ Веб: оптимизация ${msg.tier.toUpperCase()}`);
+    } else if (msg.type === 'recenter') {
+      face.recenter();
+      showSubtitle('Терминал ↔ Веб: центровка откалибрована.');
+    } else if (msg.type === 'gaze' && typeof msg.x === 'number' && typeof msg.y === 'number') {
+      face.setGaze(msg.x, msg.y);
+    }
+  });
 
   // ─── Modal Open/Close Logic ─────────────────────────────────
   function openDeck(): void {
@@ -197,9 +465,13 @@ function initMatrixFace(): void {
   });
 
   // ─── 4D Variant Selector ────────────────────────────────────
-  function selectVariant(variantKey: Eva4DVariant, announce: boolean = true): void {
+  function selectVariant(variantKey: Eva4DVariant, announce: boolean = true, broadcast: boolean = true): void {
     face.setVariant(variantKey);
     sfx.playChirp(760);
+
+    if (broadcast) {
+      bridge.send({ type: 'variant', variant: variantKey });
+    }
 
     variantCards.forEach((card) => {
       if (card.getAttribute('data-variant') === variantKey) {
@@ -245,6 +517,7 @@ function initMatrixFace(): void {
         tierBtns.forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         sfx.playChirp(540);
+        bridge.send({ type: 'tier', tier });
 
         if (tier === 'eco') {
           showSubtitle('Режим ECO активирован: векторные сканлайны без текстурных выборок (строгие 60 FPS).');
@@ -272,6 +545,7 @@ function initMatrixFace(): void {
   btnRecenter?.addEventListener('click', () => {
     face.recenter();
     sfx.playPing();
+    bridge.send({ type: 'recenter' });
     showSubtitle('Голова Евы откалибрована строго по центру экрана.');
   });
 
@@ -322,7 +596,10 @@ function initMatrixFace(): void {
     else if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'к') {
       face.recenter();
       sfx.playPing();
+      bridge.send({ type: 'recenter' });
       showSubtitle('Центровка сброшена: голова Евы строго по центру.');
+    } else if (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'с') {
+      toggleCamera();
     } else if (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'а') {
       toggleFullscreen();
       sfx.playChirp(840);
