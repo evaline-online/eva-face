@@ -169,6 +169,32 @@
     text-shadow: 0 0 6px rgba(0, 255, 102, 0.7);
   }
 
+  .btn-station-deck {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--matrix-green);
+    padding: 5px 12px;
+    border-radius: 16px;
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 800;
+    text-decoration: none;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 0 12px rgba(0, 255, 102, 0.12);
+  }
+
+  .btn-station-deck:hover {
+    background: var(--matrix-green);
+    color: #000;
+    box-shadow: 0 0 18px rgba(0, 255, 102, 0.6);
+    transform: translateY(-1px);
+  }
+
   /* ─── Persona Switcher Bar ─────────────────────────────────── */
   .persona-switcher {
     display: flex;
@@ -479,6 +505,9 @@
       <button class="btn-tier" data-tier="balanced" title="Сбалансированный: оптимальная нагрузка">BALANCED</button>
       <button class="btn-tier" data-tier="eco" title="Эко: чистые векторные градиенты (без лагов)">ECO</button>
     </div>
+
+    <!-- Station Deck Hub Link -->
+    <a href="stations/" class="btn-station-deck interactive" title="Каталог всех 8 независимых станций и модулей">🗂️ СТАНЦИИ</a>
 
     <!-- Live Dynamic FPS & WebRTC Status -->
     <div class="system-meta interactive">

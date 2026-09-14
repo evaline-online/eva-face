@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Eva Station 1 // Eva Matrix Core</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%2300ff66'>日</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/station.css">
+<script>
+  // Force station preset
+  window.STATION_CONFIG = { persona: 'eva', tier: 'ultra', title: 'STATION 01 // EVA MATRIX CORE' };
+</script>
+</head>
+<body>
+<div id="canvas-container"></div>
+
+<div class="hud-overlay">
+  <header class="top-hud">
+    <div class="brand-badge interactive">
+      <div class="pulse-dot" style="background:#00ff66; box-shadow:0 0 10px #00ff66;"></div>
+      <span class="brand-title" style="color:#00ff66;">STATION 01 // EVA MATRIX CORE</span>
+    </div>
+    <div class="station-nav interactive">
+      <a href="index.html" class="btn-deck">🗂️ ВСЕ СТАНЦИИ</a>
+      <a href="adam.html" class="btn-step">СЛЕД: ADAM →</a>
+    </div>
+    <div class="system-meta interactive">
+      <span class="fps-badge"><span id="fps-val">60</span> FPS</span>
+      <span class="meta-more">· 60 FPS ULTRA · WEBRTC READY</span>
+    </div>
+  </header>
+
+  <div class="bottom-container">
+    <div id="subtitle-box" class="subtitle-container">
+      <div class="subtitle-content">
+        <span class="subtitle-prompt">&gt; EVA:</span>
+        <span id="subtitle-text">Станция 01 активна. Зеленый матричный люминофор.</span>
+        <span class="cursor-blink">_</span>
+      </div>
+    </div>
+
+    <footer class="bottom-hud interactive">
+      <button id="btn-mic" class="btn-matrix" title="Голос"><span class="mic-icon">🎤</span> Голос</button>
+      <button id="btn-speak" class="btn-matrix" title="Спросить">🔊 Спросить</button>
+      <div class="hud-divider"></div>
+      <div class="meet-cluster">
+        <input type="text" id="meet-input" class="meet-input" placeholder="meet.google.com/xxx-yyyy-zzz">
+        <button id="btn-meet" class="btn-meet-launch">🚀 В Google Meet</button>
+        <span id="meet-status" class="meet-status-tag">● В СЕССИИ</span>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<script src="../dist/face.js?v=station_eva"></script>
+<script>
+  // Trigger persona announcement for this station
+  setTimeout(() => {
+    const btn = document.querySelector('.btn-persona[data-persona="eva"]');
+    if (btn) (btn as any).click();
+  }, 400);
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eva Station 8 // Classic Retro ASCII</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%2300ff66'>📟</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/station.css">
+<style>
+  #canvas-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #000;
+  }
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    box-shadow: 0 0 30px rgba(0, 255, 102, 0.25);
+    border: 1px solid rgba(0, 255, 102, 0.3);
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+<div id="canvas-container">
+  <canvas id="c"></canvas>
+</div>
+
+<div class="hud-overlay">
+  <header class="top-hud">
+    <div class="brand-badge interactive">
+      <div class="pulse-dot" style="background:#00ff66; box-shadow:0 0 10px #00ff66;"></div>
+      <span class="brand-title">STATION 08 // CLASSIC RETRO ASCII</span>
+    </div>
+    <div class="station-nav interactive">
+      <a href="index.html" class="btn-deck">🗂️ ВСЕ СТАНЦИИ</a>
+      <a href="eva.html" class="btn-step">СЛЕД: EVA MATRIX →</a>
+    </div>
+    <div class="system-meta interactive">
+      <span class="fps-badge">60 FPS</span>
+      <span class="meta-more">· MAKEHUMAN CC0 · 4 VARIANTS</span>
+    </div>
+  </header>
+
+  <div class="bottom-container">
+    <div id="subtitle-box" class="subtitle-container">
+      <div class="subtitle-content">
+        <span class="subtitle-prompt">&gt; ASCII:</span>
+        <span id="subtitle-text">Станция 08 активна. Классическая символьная проекция (доступна также в консоли: ./eva-face.sh ascii).</span>
+        <span class="cursor-blink">_</span>
+      </div>
+    </div>
+
+    <footer class="bottom-hud interactive">
+      <a href="index.html" class="btn-matrix" style="text-decoration:none;">🗂️ Каталог Станций</a>
+      <a href="../" class="btn-matrix" style="text-decoration:none;">🌐 Главная Станция</a>
+      <div class="hud-divider"></div>
+      <div class="meet-cluster">
+        <input type="text" id="meet-input" class="meet-input" placeholder="meet.google.com/xxx-yyyy-zzz">
+        <button id="btn-meet" class="btn-meet-launch">🚀 В Google Meet</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<script type="module">
+import { renderMultiView } from '../mhface3d.js';
+
+const VARIANTS = ['default', 'female', 'male', 'child'];
+const VIEWS = [
+  { rx: 0, ry: 0, rz: 0, label: 'FRONT' },
+  { rx: 0, ry: -0.6, rz: 0, label: '3/4' },
+  { rx: 0, ry: -Math.PI / 1.4, rz: 0, label: 'SIDE' },
+];
+
+const cellW = 5, cellH = 10;
+const panelW = 38, panelH = 28;
+const cols = 3 * panelW + 2;
+const rows = 4 * panelH + 3;
+const W = cols * cellW, H = rows * cellH;
+
+const canvas = document.getElementById('c');
+canvas.width = W; canvas.height = H;
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#010502';
+ctx.fillRect(0, 0, W, H);
+ctx.font = `${cellH}px "Courier New", monospace`;
+ctx.textBaseline = 'top';
+
+function renderAll() {
+  for (let vi = 0; vi < VARIANTS.length; vi++) {
+    const v = VARIANTS[vi];
+    const res = renderMultiView(v, VIEWS, panelW, panelH);
+    for (let pi = 0; pi < VIEWS.length; pi++) {
+      const px0 = pi * (panelW + 1) * cellW;
+      const py0 = vi * (panelH + 1) * cellH;
+      for (let j = 0; j < panelH; j++) {
+        for (let i = 0; i < panelW; i++) {
+          const idx = j * (panelW * VIEWS.length + 0) + (pi * (panelW + 1) + i);
+          const ch = res.chars[idx];
+          if (ch && ch !== ' ') {
+            ctx.fillStyle = `rgb(${res.r[idx]},${res.g[idx]},${res.b[idx]})`;
+            ctx.fillText(ch, px0 + i * cellW, py0 + j * cellH);
+          }
+        }
+      }
+    }
+  }
+}
+
+renderAll();
+</script>
+</body>
+</html>

@@ -98,6 +98,17 @@ const PALETTES: Record<TermPersona, PersonaPalette> = {
 type VisualMode = 'matrix' | 'solid';
 let visualMode: VisualMode = 'matrix'; // default Matrix Code
 
+// Parse CLI flags for direct station launch (e.g. ./eva-face.sh adam / npx tsx src/terminal.ts neo)
+for (const arg of process.argv.slice(2)) {
+  const clean = arg.toLowerCase().replace(/^--?/, '');
+  if (clean === 'eva' || clean.includes('persona=eva')) currentPersona = 'eva';
+  else if (clean === 'adam' || clean.includes('persona=adam')) currentPersona = 'adam';
+  else if (clean === 'neo' || clean.includes('persona=neo')) currentPersona = 'neo';
+  else if (clean === 'rain' || clean.includes('persona=rain')) currentPersona = 'rain';
+  else if (clean === 'solid' || clean.includes('mode=solid') || clean === 'hd') visualMode = 'solid';
+  else if (clean === 'matrix' || clean.includes('mode=matrix')) visualMode = 'matrix';
+}
+
 // Strictly single-width (wcwidth=1) Matrix Katakana & code glyph ramp
 // Prevents terminal column misalignments caused by fullwidth CJK characters!
 const MATRIX_RAMP = '  .:-=+10AZXﾊﾐﾋｳｼﾅﾓﾆｻﾜﾂｵ#%@';

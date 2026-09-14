@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eva Face // Station Deck — Каталог Всех Голов и Модулей</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%2300ff66'>日</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --matrix-green: #00ff66;
+    --matrix-dark: #010402;
+    --glass-bg: rgba(2, 14, 7, 0.85);
+    --glass-border: rgba(0, 255, 102, 0.35);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #010503 radial-gradient(circle at 50% 10%, rgba(0, 255, 102, 0.08) 0%, transparent 70%);
+    color: #e2e8f0;
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    padding: 32px 20px 60px;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 20px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .title-group h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: var(--matrix-green);
+    text-shadow: 0 0 12px rgba(0, 255, 102, 0.6);
+  }
+  .title-group p {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  .header-actions {
+    display: flex;
+    gap: 10px;
+  }
+  .btn-nav {
+    background: rgba(0, 255, 102, 0.12);
+    border: 1px solid var(--glass-border);
+    color: var(--matrix-green);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .btn-nav:hover {
+    background: var(--matrix-green);
+    color: #000;
+    box-shadow: 0 0 16px rgba(0, 255, 102, 0.7);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 24px;
+  }
+  .card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 22px;
+    backdrop-filter: blur(14px);
+    transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--card-color, var(--matrix-green));
+    box-shadow: 0 0 12px var(--card-color, var(--matrix-green));
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    border-color: var(--card-color, var(--matrix-green));
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 102, 0.2);
+  }
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .card-icon {
+    font-size: 28px;
+    filter: drop-shadow(0 0 8px rgba(0, 255, 102, 0.5));
+  }
+  .badge {
+    font-size: 10px;
+    font-weight: 800;
+    font-family: 'Orbitron', monospace;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(0, 255, 102, 0.15);
+    border: 1px solid var(--card-color, var(--matrix-green));
+    color: var(--card-color, var(--matrix-green));
+    letter-spacing: 1px;
+  }
+  .card-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+    margin-bottom: 4px;
+  }
+  .card-code {
+    font-size: 11px;
+    color: var(--card-color, var(--matrix-green));
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+  .card-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 16px;
+  }
+  .card-meta {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.65);
+    margin-bottom: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .meta-row strong {
+    color: var(--card-color, var(--matrix-green));
+  }
+  .card-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .btn-launch {
+    flex: 1;
+    background: var(--card-color, var(--matrix-green));
+    color: #000;
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+    padding: 10px 14px;
+    border-radius: 8px;
+    text-decoration: none;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-launch:hover {
+    box-shadow: 0 0 20px var(--card-color, var(--matrix-green));
+    filter: brightness(1.15);
+  }
+  .btn-cli {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    transition: 0.2s;
+  }
+  .btn-cli:hover {
+    border-color: #fff;
+    background: rgba(255, 255, 255, 0.15);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="title-group">
+      <h1>EVA FACE // STATION DECK</h1>
+      <p>Каталог независимых станций и архитектурных модулей 3D-лица Евы</p>
+    </div>
+    <div class="header-actions">
+      <a href="../" class="btn-nav">← Главная Станция</a>
+      <a href="../#meet" class="btn-nav">В Google Meet</a>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- Station 1: Eva Matrix Core -->
+    <div class="card" style="--card-color: #00ff66;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">🟢</div>
+          <span class="badge">FLAGSHIP · 60 FPS</span>
+        </div>
+        <div class="card-title">Eva Matrix Core</div>
+        <div class="card-code">MODULE: src/heads/eva_matrix.ts</div>
+        <div class="card-desc">Классический женский облик Евы из аутентичного зеленого фосфора с каскадным цифровым дождем и студийным освещением.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> Pinscreen 3D (10.8K) + Katakana Atlas</div>
+          <div class="meta-row"><strong>Физика:</strong> Пружинный возврат, взгляд, моргание</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh eva</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="eva.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+    <!-- Station 2: Adam Cyber Gold -->
+    <div class="card" style="--card-color: #ffb400;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">🟡</div>
+          <span class="badge">MASCULINE · 60 FPS</span>
+        </div>
+        <div class="card-title">Adam Cyber Gold</div>
+        <div class="card-code">MODULE: src/heads/adam_cyber.ts</div>
+        <div class="card-desc">Кибернетический командир с расширенной челюстью, солнечными бликами, темной бронзой и янтарным кодом.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> Jaw Morph (1.10) + Amber Shading</div>
+          <div class="meta-row"><strong>Палитра:</strong> Cyber Amber (#ffb400) + Bronze</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh adam</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="adam.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+    <!-- Station 3: Neo Electra Cyan -->
+    <div class="card" style="--card-color: #00f0ff;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">🔵</div>
+          <span class="badge">HIGH-CONTRAST · 60 FPS</span>
+        </div>
+        <div class="card-title">Neo Electra Cyan</div>
+        <div class="card-code">MODULE: src/heads/neo_electra.ts</div>
+        <div class="card-desc">Электрический циановый код высокой четкости. Высококонтрастные контуры с белыми сверхновыми вспышками.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> Supernova Rim Light + High-Speed Stream</div>
+          <div class="meta-row"><strong>Палитра:</strong> Electric Cyan (#00f0ff) + Obsidian</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh neo</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="neo.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+    <!-- Station 4: Pure Matrix Rain -->
+    <div class="card" style="--card-color: #32ff78;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">🌧️</div>
+          <span class="badge">PROCEDURAL · 60 FPS</span>
+        </div>
+        <div class="card-title">Pure Matrix Rain</div>
+        <div class="card-code">MODULE: src/heads/rain_code.ts</div>
+        <div class="card-desc">Сущность, органически рождающаяся из сплошного ливня матричного кода. Лицо выступает прямо из потока данных.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> Dynamic Density Emergence + Dual Streams</div>
+          <div class="meta-row"><strong>Скорость:</strong> 1.6x Ускоренный поток символов</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh rain</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="rain.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+    <!-- Station 5: Vector Hologram Eco -->
+    <div class="card" style="--card-color: #00ffcc;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">⚡</div>
+          <span class="badge">ECO GUARANTEE · 60 FPS</span>
+        </div>
+        <div class="card-title">Vector Hologram Eco</div>
+        <div class="card-code">MODULE: src/heads/hologram_eco.ts</div>
+        <div class="card-desc">Ультралегкая векторная голограмма в стиле Tron / CAD. 0 мс на выборку текстур — работает на 60 FPS на любых устройствах.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> Pure Vector Shading + CRT Scanlines</div>
+          <div class="meta-row"><strong>Нагрузка:</strong> ~0% GPU (работает на слабом железе)</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh eco</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="hologram.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+    <!-- Station 6: Cyberpunk PBR 3D -->
+    <div class="card" style="--card-color: #ff007f;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">🧬</div>
+          <span class="badge">PBR EYE-TRACKING</span>
+        </div>
+        <div class="card-title">Cyberpunk PBR 3D</div>
+        <div class="card-code">MODULE: src/heads/cyber_pbr.ts</div>
+        <div class="card-desc">Реалистичная физическая 3D-модель с глазными яблоками, зрачками, сеткой неоновых линий, точками и полигонами.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> Three.js PBR Physical + Eye Saccades</div>
+          <div class="meta-row"><strong>Режимы:</strong> Hybrid / Points / Lines / Polys</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh cyber</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="cyber.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+    <!-- Station 7: Ultra-HD TrueColor Solid -->
+    <div class="card" style="--card-color: #00ff66;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">▀</div>
+          <span class="badge">SUBPIXEL RETINA</span>
+        </div>
+        <div class="card-title">Ultra-HD TrueColor Solid</div>
+        <div class="card-code">MODULE: src/heads/solid_hd.ts</div>
+        <div class="card-desc">Высокоточный субпиксельный рендерер на основе полублоков ▀ с 24-битным RGB цветом и 3-точечным студийным светом.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> Half-Block TrueColor CPU Rasterizer</div>
+          <div class="meta-row"><strong>Частота:</strong> 90+ FPS на CPU</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh solid</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="solid.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+    <!-- Station 8: Classic Retro ASCII -->
+    <div class="card" style="--card-color: #00ff66;">
+      <div>
+        <div class="card-top">
+          <div class="card-icon">📟</div>
+          <span class="badge">RETRO 1999</span>
+        </div>
+        <div class="card-title">Classic Retro ASCII</div>
+        <div class="card-code">MODULE: src/heads/ascii_classic.ts</div>
+        <div class="card-desc">Оригинальное трафаретное 3D-лицо Евы из символов классического терминала с ретро-проекцией.</div>
+        <div class="card-meta">
+          <div class="meta-row"><strong>Технология:</strong> 2D/3D Stencil + Multihead M0..M3</div>
+          <div class="meta-row"><strong>Символы:</strong>  .:-=+*#%@</div>
+          <div class="meta-row"><strong>Терминал:</strong> <code>./eva-face.sh ascii</code></div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <a href="ascii.html" class="btn-launch">ЗАПУСК СТАНЦИИ</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
