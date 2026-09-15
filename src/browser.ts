@@ -19,6 +19,7 @@ import {
   type Eva4DVariant,
   type QualityTier,
 } from './matrix_face.js';
+import { PicoFaceDetector, rgbaToGrayscale, type FaceDetection } from './pico.js';
 
 // ─── Procedural Web Audio Cyber SFX (Zero External Files) ─────
 class MatrixAudioFx {
@@ -153,37 +154,41 @@ class MatrixBridgeClient {
   }
 }
 
-// ─── Webcam Face & Head Tracking (Mirror Mode) ────────────────
+// ─── Webcam Neural Face & Head Tracking (Pico AI // Mirror Mode) ────
 class WebcamFaceTracker {
   private video: HTMLVideoElement | null = null;
   private pipContainer: HTMLElement | null = null;
   private camStatus: HTMLElement | null = null;
+  private overlayCanvas: HTMLCanvasElement | null = null;
+  private overlayCtx: CanvasRenderingContext2D | null = null;
   private stream: MediaStream | null = null;
   private isTracking: boolean = false;
   private animId: number | null = null;
   private offCanvas: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D | null;
-  private faceDetector: any = null;
+  private pico: PicoFaceDetector;
+  private face: EvaMatrixFace;
   private smoothedX: number = 0;
   private smoothedY: number = 0;
   private lastProcessTime: number = 0;
   private onGazeCallback: (x: number, y: number) => void;
+  private scanY: number = 0;
 
-  constructor(onGaze: (x: number, y: number) => void) {
+  constructor(face: EvaMatrixFace, onGaze: (x: number, y: number) => void) {
+    this.face = face;
     this.onGazeCallback = onGaze;
     this.video = document.getElementById('webcam-video') as HTMLVideoElement | null;
     this.pipContainer = document.getElementById('cam-pip-container');
     this.camStatus = document.getElementById('cam-status');
-    this.offCanvas = document.createElement('canvas');
-    this.offCanvas.width = 64;
-    this.offCanvas.height = 48;
-    this.offCtx = this.offCanvas.getContext('2d', { willReadFrequently: true });
-
-    if (typeof (window as any).FaceDetector !== 'undefined') {
-      try {
-        this.faceDetector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-      } catch (_) {}
+    this.overlayCanvas = document.getElementById('cam-overlay-canvas') as HTMLCanvasElement | null;
+    if (this.overlayCanvas) {
+      this.overlayCtx = this.overlayCanvas.getContext('2d');
     }
+    this.offCanvas = document.createElement('canvas');
+    this.offCanvas.width = 160;
+    this.offCanvas.height = 120;
+    this.offCtx = this.offCanvas.getContext('2d', { willReadFrequently: true });
+    this.pico = new PicoFaceDetector();
   }
 
   public get active(): boolean {
@@ -193,6 +198,13 @@ class WebcamFaceTracker {
   public async start(): Promise<boolean> {
     if (this.isTracking) return true;
     try {
+      if (this.camStatus) this.camStatus.textContent = 'INIT AI';
+      // 1. Ensure cascade neural weights are loaded (from models/facefinder)
+      if (!this.pico.loaded) {
+        await this.pico.loadModel('models/facefinder');
+      }
+
+      // 2. Request webcam video
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 320 },
@@ -210,6 +222,9 @@ class WebcamFaceTracker {
       if (this.pipContainer) {
         this.pipContainer.classList.remove('hidden');
       }
+
+      // Lock gaze control to camera (mouse movement won't fight camera)
+      this.face.setExternalGazeControl(true);
 
       this.isTracking = true;
       this.processLoop();
@@ -237,6 +252,11 @@ class WebcamFaceTracker {
     if (this.pipContainer) {
       this.pipContainer.classList.add('hidden');
     }
+    if (this.overlayCtx && this.overlayCanvas) {
+      this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+    }
+    // Return gaze control to mouse and re-center
+    this.face.setExternalGazeControl(false);
     this.smoothedX = 0;
     this.smoothedY = 0;
     this.onGazeCallback(0, 0);
@@ -246,67 +266,120 @@ class WebcamFaceTracker {
     if (!this.isTracking) return;
 
     const now = performance.now();
-    // Maintain 60 FPS in WebGL: limit image processing to 25Hz
-    if (now - this.lastProcessTime >= 38 && this.video && this.video.readyState >= 2) {
+    // Run detection loop at ~30 FPS (Pico runs in ~3ms, WebGL runs at 60 FPS)
+    if (now - this.lastProcessTime >= 32 && this.video && this.video.readyState >= 2) {
       this.lastProcessTime = now;
-      let detectedTarget: { x: number; y: number } | null = null;
+      const w = 160;
+      const h = 120;
 
-      // 1. Hardware FaceDetector API if available
-      if (this.faceDetector) {
-        try {
-          const faces = await this.faceDetector.detect(this.video);
-          if (faces && faces.length > 0) {
-            const b = faces[0].boundingBox;
-            const cx = (b.x + b.width * 0.5) / this.video.videoWidth;
-            const cy = (b.y + b.height * 0.5) / this.video.videoHeight;
-            // Mirror coordinate mapping
-            detectedTarget = {
-              x: (0.5 - cx) * 2.5,
-              y: (cy - 0.45) * 2.2,
-            };
+      let bestFace: FaceDetection | null = null;
+
+      if (this.offCtx) {
+        this.offCtx.drawImage(this.video, 0, 0, w, h);
+        const imgData = this.offCtx.getImageData(0, 0, w, h);
+        const gray = rgbaToGrayscale(imgData.data, h, w);
+
+        if (this.pico.loaded) {
+          const detections = this.pico.detect(gray, h, w, w);
+          // Filter confident detections (score > 6.0)
+          const confident = detections.filter((d) => d[3] > 6.0);
+          if (confident.length > 0) {
+            confident.sort((a, b) => b[3] - a[3]);
+            bestFace = confident[0];
           }
-        } catch (_) {}
+        }
       }
 
-      // 2. High-speed luminance & face centroid fallback (64x48)
-      if (!detectedTarget && this.offCtx) {
-        try {
-          this.offCtx.drawImage(this.video, 0, 0, 64, 48);
-          const imgData = this.offCtx.getImageData(0, 0, 64, 48);
-          const data = imgData.data;
-          let sumX = 0, sumY = 0, count = 0;
+      // Draw HUD overlay on camera PIP
+      if (this.overlayCtx && this.overlayCanvas) {
+        const ctx = this.overlayCtx;
+        ctx.clearRect(0, 0, w, h);
 
-          for (let y = 4; y < 44; y += 2) {
-            for (let x = 6; x < 58; x += 2) {
-              const idx = (y * 64 + x) * 4;
-              const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-              if (lum > 50 && lum < 220) {
-                sumX += x;
-                sumY += y;
-                count++;
-              }
-            }
-          }
+        if (bestFace) {
+          const [r, c, s, q] = bestFace;
+          // Invert X because the video is mirrored with scaleX(-1)
+          const pipX = w - c;
+          const pipY = r;
+          const halfS = s / 2;
 
-          if (count > 20) {
-            const avgX = sumX / count;
-            const avgY = sumY / count;
-            const normX = ((32 - avgX) / 24) * 1.8;
-            const normY = ((avgY - 24) / 18) * 1.5;
-            detectedTarget = { x: normX, y: normY };
-          }
-        } catch (_) {}
-      }
+          ctx.save();
+          ctx.strokeStyle = '#00ff66';
+          ctx.lineWidth = 1.5;
+          ctx.shadowColor = '#00ff66';
+          ctx.shadowBlur = 6;
 
-      if (detectedTarget) {
-        const alpha = 0.22;
-        this.smoothedX += (detectedTarget.x - this.smoothedX) * alpha;
-        this.smoothedY += (detectedTarget.y - this.smoothedY) * alpha;
-        this.onGazeCallback(this.smoothedX, this.smoothedY);
-        if (this.camStatus) this.camStatus.textContent = 'TRACKING';
-      } else {
-        if (this.camStatus) this.camStatus.textContent = 'SEARCHING';
+          const left = Math.max(2, pipX - halfS);
+          const top = Math.max(2, pipY - halfS);
+          const size = Math.min(w - left - 2, s);
+          const cornerLen = Math.max(6, size * 0.22);
+
+          // Top-left corner
+          ctx.beginPath();
+          ctx.moveTo(left, top + cornerLen);
+          ctx.lineTo(left, top);
+          ctx.lineTo(left + cornerLen, top);
+          // Top-right corner
+          ctx.moveTo(left + size - cornerLen, top);
+          ctx.lineTo(left + size, top);
+          ctx.lineTo(left + size, top + cornerLen);
+          // Bottom-left corner
+          ctx.moveTo(left, top + size - cornerLen);
+          ctx.lineTo(left, top + size);
+          ctx.lineTo(left + cornerLen, top + size);
+          // Bottom-right corner
+          ctx.moveTo(left + size - cornerLen, top + size);
+          ctx.lineTo(left + size, top + size);
+          ctx.lineTo(left + size, top + size - cornerLen);
+          ctx.stroke();
+
+          // Center target point
+          ctx.beginPath();
+          ctx.arc(pipX, pipY, 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#00ff66';
+          ctx.fill();
+
+          // HUD Score tag
+          ctx.font = '8px monospace';
+          ctx.fillStyle = '#00ff66';
+          ctx.fillText(`AI LOCK: ${(Math.min(99, q * 3.5)).toFixed(0)}%`, left, Math.max(10, top - 4));
+          ctx.restore();
+
+          if (this.camStatus) this.camStatus.textContent = 'LOCKED';
+
+          // ─── Mirror Gaze Mapping ──────────────────────────────
+          // Frame center: (80, 60)
+          // When user tilts to their left -> c moves to camera right (c > 80)
+          // In mirror mode, Eva turns to user's visual left (negative targetX)
+          const rawTargetX = -((c - 80) / 40);
+          const rawTargetY = ((60 - r) / 30);
+
+          const targetX = Math.max(-1.4, Math.min(1.4, rawTargetX));
+          const targetY = Math.max(-1.4, Math.min(1.4, rawTargetY));
+
+          // Exponential smoothing for snappy yet stable head motion
+          const alpha = 0.35;
+          this.smoothedX += (targetX - this.smoothedX) * alpha;
+          this.smoothedY += (targetY - this.smoothedY) * alpha;
+
+          this.onGazeCallback(this.smoothedX, this.smoothedY);
+        } else {
+          // Scanline sweep animation
+          this.scanY = (this.scanY + 2.5) % h;
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 255, 102, 0.45)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0, this.scanY);
+          ctx.lineTo(w, this.scanY);
+          ctx.stroke();
+          ctx.restore();
+
+          if (this.camStatus) this.camStatus.textContent = 'SEARCHING';
+
+          this.smoothedX *= 0.94;
+          this.smoothedY *= 0.94;
+          this.onGazeCallback(this.smoothedX, this.smoothedY);
+        }
       }
     }
 
@@ -347,18 +420,19 @@ function initMatrixFace(): void {
   let subtitleTimeout: any = null;
 
   // ─── Webcam Head Tracking & Mirror Mode ─────────────────────
-  const camTracker = new WebcamFaceTracker((x, y) => {
+  const camTracker = new WebcamFaceTracker(face, (x, y) => {
     face.setGaze(x, y);
     bridge.send({ type: 'gaze', x, y });
   });
 
   async function toggleCamera(): Promise<void> {
     if (!camTracker.active) {
+      showSubtitle('Инициализация нейросетевого слежения за лицом...');
       const ok = await camTracker.start();
       if (ok) {
         btnCam?.classList.add('active');
         sfx.playChirp(880);
-        showSubtitle('📹 Камера активна: Ева зеркалит ваши движения головы (Mirror Mode).');
+        showSubtitle('📹 Нейросетевое слежение лицом активно (Pico AI // 60 FPS Mirror Mode).');
       } else {
         showSubtitle('⚠️ Доступ к веб-камере не разрешен или камера занята.');
       }
@@ -366,7 +440,7 @@ function initMatrixFace(): void {
       camTracker.stop();
       btnCam?.classList.remove('active');
       sfx.playChirp(600);
-      showSubtitle('📹 Слежение через камеру отключено.');
+      showSubtitle('📹 Слежение через камеру выключено.');
     }
   }
 

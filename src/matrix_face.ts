@@ -281,6 +281,7 @@ export class EvaMatrixFace {
   private currentRotY = 0;
   private mouseX = 0;
   private mouseY = 0;
+  private isExternalGazeControl = false;
 
   // Expressions & Speech
   private mouthOpen = 0;
@@ -807,6 +808,18 @@ export class EvaMatrixFace {
     this.mouseY = Math.max(-1.5, Math.min(1.5, y));
   }
 
+  public setExternalGazeControl(enabled: boolean): void {
+    this.isExternalGazeControl = enabled;
+    if (!enabled) {
+      this.mouseX = 0;
+      this.mouseY = 0;
+    }
+  }
+
+  public getExternalGazeControl(): boolean {
+    return this.isExternalGazeControl;
+  }
+
   public getGaze(): { x: number; y: number; rotX: number; rotY: number } {
     return {
       x: this.mouseX,
@@ -924,8 +937,10 @@ export class EvaMatrixFace {
     });
 
     window.addEventListener('mousemove', (e) => {
-      this.mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-      this.mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+      if (!this.isExternalGazeControl) {
+        this.mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+        this.mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+      }
 
       if (this.isDragging) {
         const dx = (e.clientX - this.lastDragX) * 0.008;
@@ -954,8 +969,10 @@ export class EvaMatrixFace {
     window.addEventListener('touchmove', (e) => {
       if (e.touches.length > 0) {
         const touch = e.touches[0];
-        this.mouseX = (touch.clientX / window.innerWidth) * 2 - 1;
-        this.mouseY = -(touch.clientY / window.innerHeight) * 2 + 1;
+        if (!this.isExternalGazeControl) {
+          this.mouseX = (touch.clientX / window.innerWidth) * 2 - 1;
+          this.mouseY = -(touch.clientY / window.innerHeight) * 2 + 1;
+        }
 
         if (this.isDragging) {
           const dx = (touch.clientX - this.lastDragX) * 0.008;
